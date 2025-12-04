@@ -1,0 +1,19 @@
+# --- System Files (Junk) ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Logs ---
+*.log
+npm-debug.log
+
+# --- Dependencies ---
+# Even though you aren't using npm yet, this is good safety
+node_modules/
+package-lock.json
+
+# --- Editor Settings ---
+# Keeps your personal editor settings private
+.vscode/
+.idea/
+*.swp
