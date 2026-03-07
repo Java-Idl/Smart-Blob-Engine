@@ -237,6 +237,12 @@
             gap: 6px;
         }
 
+        .preset-item {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
         .btn-grid button {
             width: 100%;
             border: 0;
@@ -268,6 +274,26 @@
         }
 
         .preset-grid button:hover { filter: brightness(1.08); }
+
+        .preset-help {
+            margin-top: 3px;
+            font-size: 10px;
+            line-height: 1.2;
+            color: var(--text-dim);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 0;
+            max-height: 0;
+            transition: opacity 120ms ease, max-height 120ms ease;
+            pointer-events: none;
+        }
+
+        .preset-item:hover .preset-help,
+        .preset-item:focus-within .preset-help {
+            opacity: 1;
+            max-height: 14px;
+        }
 
         .tune-row {
             margin: 8px 0;
@@ -367,9 +393,18 @@
                 <div class="label">Live Tuning</div>
 
                 <div class="preset-grid" style="margin-bottom: 8px;">
-                    <button onclick="applyPreset('arcade')">Arcade</button>
-                    <button onclick="applyPreset('flat')">Flat Precision</button>
-                    <button onclick="applyPreset('classic')">Classic Blob</button>
+                    <div class="preset-item">
+                        <button onclick="applyPreset('arcade')">Arcade</button>
+                        <div class="preset-help">Fast, predictive, high-arc chase.</div>
+                    </div>
+                    <div class="preset-item">
+                        <button onclick="applyPreset('flat')">Flat Precision</button>
+                        <div class="preset-help">Low arc, short steps, level tracking.</div>
+                    </div>
+                    <div class="preset-item">
+                        <button onclick="applyPreset('classic')">Classic Blob</button>
+                        <div class="preset-help">Balanced jumps with calmer pacing.</div>
+                    </div>
                 </div>
 
                 <div class="tune-row">
