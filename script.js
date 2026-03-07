@@ -41,12 +41,24 @@ class TweenManager {
         }
     }
 
+    remove(target, keys = null) {
+        const keySet = Array.isArray(keys) && keys.length > 0 ? new Set(keys) : null;
+
+        this.tweens = this.tweens.filter((tween) => {
+            if (tween.target !== target) return true;
+            if (!keySet) return false;
+            return !Object.keys(tween.props).some((key) => keySet.has(key));
+        });
+    }
+
     ease(t, type) {
         switch (type) {
             case 'easeOutQuad':
                 return 1 - (1 - t) * (1 - t);
             case 'easeInQuad':
                 return t * t;
+            case 'easeInOutQuad':
+                return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
             case 'easeOutCubic':
                 return 1 - Math.pow(1 - t, 3);
             case 'easeInCubic':
@@ -217,14 +229,25 @@ class SmartBlob {
             y: 0,
             scaleX: 1,
             scaleY: 1,
+            rotation: 0,
             isJumping: false
         };
 
+        this.animation = {
+            lastFrameTime: performance.now(),
+            idleTime: 0,
+            lookOffset: 0,
+            blinkWindowStart: -1,
+            nextBlinkAt: performance.now() + 1200 + Math.random() * 2800
+        };
+
         this.defaultMetrics = {
-            urgency: 0,
-            maxJumpX: this.config.maxJumpX,
+            graphNodes: 0,
+            graphEdges: 0,
+            startOptions: 0,
             selectedPathLength: 0,
-            bestTargetDistance: 0,
+            targetError: 0,
+            lastHopDistance: 0,
             expandedNodes: 0,
             solveMs: 0,
             fallbackCount: 0,
@@ -233,13 +256,17 @@ class SmartBlob {
 
         this.metrics = new BlobEngineMetrics(this.defaultMetrics);
 
+        const initialDebugMode = options.debugMode || (options.debugPath ? 'used' : 'off');
         this.debug = {
-            enabled: Boolean(options.debugPath),
+            mode: 'off',
+            enabled: false,
             nodes: [],
             edges: [],
+            calculatedEdges: [],
             activePath: [],
             metrics: this.metrics
         };
+        this.setDebugMode(initialDebugMode);
 
         this.isInitialized = false;
         this.cachedGraph = null;
@@ -259,13 +286,54 @@ class SmartBlob {
     resetMetrics() {
         const resetSnapshot = {
             ...this.defaultMetrics,
-            maxJumpX: this.config.maxJumpX,
             mode: 'idle'
         };
 
         this.metrics.reset(resetSnapshot);
         this.debug.activePath = [];
+        this.debug.calculatedEdges = [];
         this.lastJumpTime = performance.now();
+    }
+
+    setDebugMode(mode = 'off') {
+        const allowedModes = new Set(['off', 'used', 'calculated', 'all']);
+        const nextMode = allowedModes.has(mode) ? mode : 'off';
+        this.debug.mode = nextMode;
+        this.debug.enabled = nextMode !== 'off';
+
+        if (this.debug.enabled) {
+            this.syncDebugGraphData();
+        }
+    }
+
+    cycleDebugMode() {
+        const orderedModes = ['off', 'used', 'calculated', 'all'];
+        const currentIndex = orderedModes.indexOf(this.debug.mode);
+        const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % orderedModes.length;
+        const nextMode = orderedModes[nextIndex];
+        this.setDebugMode(nextMode);
+        return nextMode;
+    }
+
+    countGraphEdges(graph) {
+        let edgeCount = 0;
+        for (const neighbors of graph.edges.values()) {
+            edgeCount += neighbors.length;
+        }
+        return edgeCount;
+    }
+
+    syncDebugGraphData(graph = this.cachedGraph) {
+        if (!graph) {
+            this.debug.nodes = [];
+            this.debug.edges = [];
+            return;
+        }
+
+        this.debug.nodes = graph.nodes;
+        this.debug.edges = Array.from(graph.edges.entries()).flatMap(([from, list]) => {
+            return list.map((edge) => ({ from, to: edge.to }));
+        });
     }
 
     initCanvas() {
@@ -520,7 +588,9 @@ class SmartBlob {
             edges.set(node.id, []);
         }
 
-        const { maxJumpX, maxJumpUp, maxDropDown } = this.config;
+        const graphMaxJumpX = this.config.maxJumpX * (1 + this.config.maxDynamicJumpBoost + 0.15);
+        const graphMaxJumpUp = this.config.maxJumpUp * 1.8;
+        const graphMaxDropDown = this.config.maxDropDown * 1.8;
         const maxNeighborsPerNode = this.config.maxNeighborsPerNode;
 
         const costBetween = (fromNode, toNode) => {
@@ -537,9 +607,9 @@ class SmartBlob {
             const dy = toNode.y - fromNode.y;
 
             if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-            if (Math.abs(dx) > maxJumpX) return;
-            if (dy < -maxJumpUp) return;
-            if (dy > maxDropDown) return;
+            if (Math.abs(dx) > graphMaxJumpX) return;
+            if (dy < -graphMaxJumpUp) return;
+            if (dy > graphMaxDropDown) return;
 
             edges.get(fromNode.id).push({ to: toNode.id, cost: costBetween(fromNode, toNode) });
         };
@@ -572,8 +642,8 @@ class SmartBlob {
                 const dx = toNode.x - fromNode.x;
                 const dy = toNode.y - fromNode.y;
 
-                if (Math.abs(dx) > maxJumpX) continue;
-                if (dy < -maxJumpUp || dy > maxDropDown) continue;
+                if (Math.abs(dx) > graphMaxJumpX) continue;
+                if (dy < -graphMaxJumpUp || dy > graphMaxDropDown) continue;
 
                 const cost = costBetween(fromNode, toNode);
                 const rank = cost + (fromNode.platformIndex === toNode.platformIndex ? 50 : 0);
@@ -593,17 +663,18 @@ class SmartBlob {
         };
 
         if (this.debug.enabled) {
-            this.debug.nodes = uniqueNodes;
-            this.debug.edges = Array.from(edges.entries()).flatMap(([from, list]) => {
-                return list.map((edge) => ({ from, to: edge.to }));
-            });
+            this.syncDebugGraphData(this.cachedGraph);
         }
 
         return this.cachedGraph;
     }
 
     getGraph() {
-        return this.cachedGraph || this.buildPathGraph();
+        const graph = this.cachedGraph || this.buildPathGraph();
+        if (this.debug.enabled) {
+            this.syncDebugGraphData(graph);
+        }
+        return graph;
     }
 
     createStartNode(graph, limits) {
@@ -739,7 +810,8 @@ class SmartBlob {
         return {
             gScore,
             cameFrom,
-            expandedNodes
+            expandedNodes,
+            treeEdges: Array.from(cameFrom.entries()).map(([to, from]) => ({ from, to }))
         };
     }
 
@@ -856,7 +928,7 @@ class SmartBlob {
             }
         }
 
-        return best ? best.node : null;
+        return best;
     }
 
     calculateNextHop() {
@@ -864,19 +936,27 @@ class SmartBlob {
         const limits = this.getDynamicPathParams();
         const graph = this.getGraph();
         const { startNode, startEdges } = this.createStartNode(graph, limits);
+        const graphEdgeCount = this.countGraphEdges(graph);
+        const blobCenterX = startNode.x + this.config.blobSize / 2;
+        const blobCenterY = startNode.y + this.config.blobSize / 2;
+        const currentDistanceToTarget = Math.hypot(blobCenterX - limits.targetX, blobCenterY - limits.targetY);
 
         this.metrics.update({
-            urgency: limits.urgency,
-            maxJumpX: limits.maxJumpX,
+            graphNodes: graph.nodes.length,
+            graphEdges: graphEdgeCount,
+            startOptions: startEdges.length,
             selectedPathLength: 0,
-            bestTargetDistance: 0,
+            targetError: 0,
             expandedNodes: 0,
             solveMs: 0,
             mode: 'searching'
         });
 
         if (startEdges.length === 0) {
-            if (this.debug.enabled) this.debug.activePath = [];
+            if (this.debug.enabled) {
+                this.debug.activePath = [];
+                this.debug.calculatedEdges = [];
+            }
             this.metrics.update({
                 mode: 'blocked',
                 solveMs: performance.now() - solveStart
@@ -885,7 +965,14 @@ class SmartBlob {
         }
 
         const shortestPaths = this.runShortestPaths(graph, startNode, startEdges, limits);
-        this.metrics.set('expandedNodes', shortestPaths.expandedNodes);
+        this.metrics.update({
+            expandedNodes: shortestPaths.expandedNodes,
+            startOptions: startEdges.length
+        });
+
+        if (this.debug.enabled) {
+            this.debug.calculatedEdges = shortestPaths.treeEdges;
+        }
 
         const bestReachable = this.pickBestReachableNode(graph, startNode, shortestPaths, limits);
 
@@ -902,7 +989,7 @@ class SmartBlob {
 
                 this.metrics.update({
                     selectedPathLength: bestReachable.path.length,
-                    bestTargetDistance: bestReachable.targetDistance,
+                    targetError: bestReachable.targetDistance,
                     mode: 'astar',
                     solveMs: performance.now() - solveStart
                 });
@@ -915,32 +1002,43 @@ class SmartBlob {
                     x: finalX,
                     y: finalY,
                     path: bestReachable.path,
-                    bestTargetDistance: bestReachable.targetDistance,
+                    targetError: bestReachable.targetDistance,
+                    mode: 'astar',
                     improvement: bestReachable.improvement
                 };
             }
         }
 
-        const fallbackNode = this.findDirectFallback(graph, startNode, limits);
-        if (fallbackNode) {
+        const fallback = this.findDirectFallback(graph, startNode, limits);
+        if (fallback?.node) {
+            const fallbackNode = fallback.node;
             if (this.debug.enabled) {
                 this.debug.activePath = [startNode, fallbackNode];
             }
 
             this.metrics.update({
                 selectedPathLength: 2,
-                bestTargetDistance: best.score,
+                targetError: Math.hypot(
+                    (fallbackNode.x + this.config.blobSize / 2) - limits.targetX,
+                    (fallbackNode.y + this.config.blobSize / 2) - limits.targetY
+                ),
                 mode: 'fallback',
                 solveMs: performance.now() - solveStart
             });
             this.metrics.increment('fallbackCount', 1);
 
+            const fallbackTargetError = Math.hypot(
+                (fallbackNode.x + this.config.blobSize / 2) - limits.targetX,
+                (fallbackNode.y + this.config.blobSize / 2) - limits.targetY
+            );
+
             return {
                 x: fallbackNode.x,
                 y: fallbackNode.y + this.config.blobSize,
                 path: [startNode.id, fallbackNode.id],
-                bestTargetDistance: best.score,
-                improvement: 0
+                targetError: fallbackTargetError,
+                mode: 'fallback',
+                improvement: Math.max(0, currentDistanceToTarget - fallbackTargetError)
             };
         }
 
@@ -968,11 +1066,15 @@ class SmartBlob {
         const plannedTopY = target.y - this.config.blobSize;
         const plannedDistance = Math.hypot(target.x - this.blob.x, plannedTopY - this.blob.y);
         if (!force && plannedDistance < this.config.minMoveDistance) {
+            const isFallbackHop = target.mode === 'fallback';
+            if (isFallbackHop && plannedDistance >= this.config.minMoveDistance * 0.5) {
+                // allow short corrective fallback hops
+            } else {
             const blobCenterX = this.blob.x + this.config.blobSize / 2;
             const blobCenterY = this.blob.y + this.config.blobSize / 2;
             const currentDistanceToMouse = Math.hypot(blobCenterX - this.mouse.x, blobCenterY - this.mouse.y);
-            const projectedDistance = Number.isFinite(target.bestTargetDistance)
-                ? target.bestTargetDistance
+            const projectedDistance = Number.isFinite(target.targetError)
+                ? target.targetError
                 : currentDistanceToMouse;
             const improvement = Number.isFinite(target.improvement)
                 ? target.improvement
@@ -981,10 +1083,12 @@ class SmartBlob {
             if (improvement < 0.25) {
                 return;
             }
+            }
         }
 
         this.blob.isJumping = true;
         this.lastJumpTime = now;
+        this.metrics.set('lastHopDistance', plannedDistance);
 
         const blob = this.blob;
         const baseSpeed = this.config.jumpSpeed;
@@ -1002,10 +1106,14 @@ class SmartBlob {
             360,
             760
         );
+        const jumpDirection = target.x >= blob.x ? 1 : -1;
+        const takeoffDuration = this.clamp(95 + travelDistance * 0.06, 95, 165);
 
-        this.tweens.add(blob, { scaleX: 1.4, scaleY: 0.6 }, 140, 'easeOutQuad', () => {
-            this.tweens.add(blob, { scaleX: 0.7, scaleY: 1.3 }, 140, 'easeOutQuad');
-            this.tweens.add(blob, { x: target.x }, speed, 'linear');
+        this.tweens.remove(blob, ['scaleX', 'scaleY', 'rotation']);
+
+        this.tweens.add(blob, { scaleX: 1.42, scaleY: 0.58, rotation: jumpDirection * 0.1 }, takeoffDuration, 'easeOutQuad', () => {
+            this.tweens.add(blob, { scaleX: 0.74, scaleY: 1.28, rotation: jumpDirection * 0.17 }, 120, 'easeOutCubic');
+            this.tweens.add(blob, { x: target.x }, speed, isFlatHop ? 'easeInOutQuad' : 'linear');
 
             let arcHeight;
             if (isFlatHop) {
@@ -1022,10 +1130,12 @@ class SmartBlob {
             const downDuration = speed * 0.5;
 
             this.tweens.add(blob, { y: peakY }, upDuration, 'easeOutCubic', () => {
+                this.tweens.add(blob, { scaleX: 0.92, scaleY: 1.08 }, Math.min(180, downDuration * 0.48), 'easeInOutQuad');
+                this.tweens.add(blob, { rotation: jumpDirection * 0.06 }, Math.min(170, downDuration * 0.42), 'easeInQuad');
                 this.tweens.add(blob, { y: endY }, downDuration, 'easeInCubic', () => {
                     blob.y = endY;
-                    this.tweens.add(blob, { scaleX: 1.5, scaleY: 0.5 }, 90, 'easeOutQuad', () => {
-                        this.tweens.add(blob, { scaleX: 1, scaleY: 1 }, 220, 'easeOutElastic', () => {
+                    this.tweens.add(blob, { scaleX: 1.52, scaleY: 0.5, rotation: 0 }, 90, 'easeOutQuad', () => {
+                        this.tweens.add(blob, { scaleX: 1, scaleY: 1, rotation: 0 }, 240, 'easeOutElastic', () => {
                             blob.isJumping = false;
                         });
                     });
@@ -1034,36 +1144,77 @@ class SmartBlob {
         });
     }
 
-    drawDebugPath() {
-        if (!this.debug.enabled) return;
+    updateSecondaryAnimation(time) {
+        const dt = this.clamp(time - this.animation.lastFrameTime, 0, 50);
+        this.animation.lastFrameTime = time;
 
-        const { ctx } = this;
+        this.animation.idleTime += this.blob.isJumping ? dt * 0.35 : dt;
 
-        ctx.save();
-        ctx.globalAlpha = 0.25;
-        ctx.strokeStyle = '#1976d2';
-        ctx.lineWidth = 1;
+        const centerX = this.blob.x + this.config.blobSize / 2;
+        const desiredLook = this.clamp((this.mouse.x - centerX) / 110, -1, 1);
+        this.animation.lookOffset += (desiredLook - this.animation.lookOffset) * 0.2;
 
-        for (const edge of this.debug.edges) {
-            const from = this.debug.nodes[edge.from];
-            const to = this.debug.nodes[edge.to];
-            if (!from || !to) continue;
-            ctx.beginPath();
-            ctx.moveTo(from.x + this.config.blobSize / 2, from.y + this.config.blobSize / 2);
-            ctx.lineTo(to.x + this.config.blobSize / 2, to.y + this.config.blobSize / 2);
-            ctx.stroke();
+        if (time >= this.animation.nextBlinkAt && this.animation.blinkWindowStart < 0) {
+            this.animation.blinkWindowStart = time;
+            this.animation.nextBlinkAt = time + 1200 + Math.random() * 3200;
         }
 
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = '#1565c0';
-        for (const node of this.debug.nodes) {
-            ctx.beginPath();
-            ctx.arc(node.x + this.config.blobSize / 2, node.y + this.config.blobSize / 2, 3, 0, Math.PI * 2);
-            ctx.fill();
+        if (this.animation.blinkWindowStart > 0 && time - this.animation.blinkWindowStart > 140) {
+            this.animation.blinkWindowStart = -1;
+        }
+    }
+
+    getBlinkAmount(time) {
+        if (this.animation.blinkWindowStart < 0) return 0;
+        const blinkT = (time - this.animation.blinkWindowStart) / 140;
+        if (blinkT <= 0 || blinkT >= 1) return 0;
+        return blinkT < 0.5 ? blinkT * 2 : (1 - blinkT) * 2;
+    }
+
+    drawDebugPath() {
+        if (!this.debug.enabled || this.debug.mode === 'off') return;
+
+        const { ctx } = this;
+        const mode = this.debug.mode;
+
+        ctx.save();
+        const drawEdgeList = (edges, color, alpha, width) => {
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+
+            for (const edge of edges) {
+                const from = edge.from === -1 ? this.blob : this.debug.nodes[edge.from];
+                const to = edge.to === -1 ? this.blob : this.debug.nodes[edge.to];
+                if (!from || !to) continue;
+                ctx.beginPath();
+                ctx.moveTo(from.x + this.config.blobSize / 2, from.y + this.config.blobSize / 2);
+                ctx.lineTo(to.x + this.config.blobSize / 2, to.y + this.config.blobSize / 2);
+                ctx.stroke();
+            }
+        };
+
+        if (mode === 'all') {
+            drawEdgeList(this.debug.edges, '#4fa9ff', 0.18, 1);
+        }
+
+        if (mode === 'calculated' || mode === 'all') {
+            drawEdgeList(this.debug.calculatedEdges, '#ffb300', 0.62, 2);
+        }
+
+        if (mode === 'all') {
+            ctx.globalAlpha = 0.88;
+            ctx.fillStyle = '#1565c0';
+            for (const node of this.debug.nodes) {
+                ctx.beginPath();
+                ctx.arc(node.x + this.config.blobSize / 2, node.y + this.config.blobSize / 2, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         if (this.debug.activePath.length > 1) {
-            ctx.strokeStyle = '#00c853';
+            ctx.globalAlpha = 0.98;
+            ctx.strokeStyle = '#00ff84';
             ctx.lineWidth = 3;
             ctx.beginPath();
             const first = this.debug.activePath[0];
@@ -1088,10 +1239,33 @@ class SmartBlob {
 
         const cx = blob.x + size / 2;
         const cy = blob.y + size;
+        const idleBreath = this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.0052) * 0.04;
+        const idleSway = this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.003) * 0.02;
+        const bobY = this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.0044) * 1.8;
+        const renderScaleX = blob.scaleX * (1 - idleBreath * 0.62 + idleSway);
+        const renderScaleY = blob.scaleY * (1 + idleBreath);
+        const renderRotation = blob.rotation + (this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.0022) * 0.03);
+
+        const shadowScale = this.blob.isJumping ? 0.8 : 1;
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.24)';
+        ctx.beginPath();
+        ctx.ellipse(
+            cx,
+            blob.y + size + 7,
+            size * 0.37 * shadowScale,
+            size * 0.13 * shadowScale,
+            0,
+            0,
+            Math.PI * 2
+        );
+        ctx.fill();
+        ctx.restore();
 
         ctx.save();
-        ctx.translate(cx, cy);
-        ctx.scale(blob.scaleX, blob.scaleY);
+        ctx.translate(cx, cy + bobY);
+        ctx.rotate(renderRotation);
+        ctx.scale(renderScaleX, renderScaleY);
         ctx.translate(-cx, -cy);
 
         ctx.fillStyle = config.colors.blob;
@@ -1106,17 +1280,20 @@ class SmartBlob {
         ctx.lineWidth = 3;
         ctx.strokeRect(blob.x, blob.y, size, size);
 
-        const centerX = blob.x + size / 2;
-        const lookDir = (this.mouse.x > centerX ? 1 : -1) * 3;
+        const lookDir = Math.round(this.animation.lookOffset * 3);
+        const blinkAmount = this.getBlinkAmount(performance.now());
+        const eyeHeight = Math.max(1, Math.round(8 * (1 - blinkAmount)));
         const eyeY = blob.y + 10;
 
         ctx.fillStyle = config.colors.eye;
-        ctx.fillRect(blob.x + 6 + lookDir, eyeY, 6, 8);
-        ctx.fillRect(blob.x + 18 + lookDir, eyeY, 6, 8);
+        ctx.fillRect(blob.x + 6 + lookDir, eyeY, 6, eyeHeight);
+        ctx.fillRect(blob.x + 18 + lookDir, eyeY, 6, eyeHeight);
 
-        ctx.fillStyle = 'white';
-        ctx.fillRect(blob.x + 6 + lookDir, eyeY, 2, 2);
-        ctx.fillRect(blob.x + 18 + lookDir, eyeY, 2, 2);
+        if (eyeHeight > 2) {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(blob.x + 6 + lookDir, eyeY, 2, 2);
+            ctx.fillRect(blob.x + 18 + lookDir, eyeY, 2, 2);
+        }
 
         ctx.restore();
     }
@@ -1125,6 +1302,7 @@ class SmartBlob {
         if (!this.rafId) return;
 
         this.updateMouseCoordinates();
+        this.updateSecondaryAnimation(time);
         this.tweens.update(time);
 
         if (!this.blob.isJumping) {
