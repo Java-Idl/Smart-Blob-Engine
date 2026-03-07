@@ -688,10 +688,16 @@ class SmartBlob {
             x: this.blob.x,
             y: this.blob.y
         };
+        const startLimits = {
+            ...limits,
+            maxJumpX: limits.maxJumpX * 1.35,
+            maxJumpUp: limits.maxJumpUp * 1.2,
+            maxDropDown: limits.maxDropDown * 1.3
+        };
         const candidateEdges = [];
 
         for (const node of graph.nodes) {
-            if (!this.canTraverse(startNode, node, limits)) continue;
+            if (!this.canTraverse(startNode, node, startLimits)) continue;
 
             const dx = node.x - startNode.x;
             const dy = node.y - startNode.y;
@@ -776,6 +782,12 @@ class SmartBlob {
         const queue = new MinPriorityQueue();
         const visited = new Set();
         let expandedNodes = 0;
+        const startTraversalLimits = {
+            ...limits,
+            maxJumpX: limits.maxJumpX * 1.35,
+            maxJumpUp: limits.maxJumpUp * 1.2,
+            maxDropDown: limits.maxDropDown * 1.3
+        };
 
         const cameFrom = new Map();
         const gScore = new Map();
@@ -797,7 +809,8 @@ class SmartBlob {
             for (const edge of neighbors) {
                 const nextNode = graph.nodes[edge.to];
                 if (!nextNode) continue;
-                if (!this.canTraverse(currentNode, nextNode, limits)) continue;
+                const traversalLimits = currentId === startId ? startTraversalLimits : limits;
+                if (!this.canTraverse(currentNode, nextNode, traversalLimits)) continue;
 
                 const verticalIntentPenalty = this.getTraversalPenalty(currentNode, nextNode, limits);
                 const tentativeG = (gScore.get(currentId) ?? Infinity) + edge.cost + verticalIntentPenalty;
