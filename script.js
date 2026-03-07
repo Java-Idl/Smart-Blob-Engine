@@ -197,12 +197,10 @@ class SmartBlob {
             maxJumpX: options.maxJumpX || 320,
             maxJumpUp: options.maxJumpUp || 260,
             maxDropDown: options.maxDropDown || 520,
-            pathGoalCandidates: options.pathGoalCandidates || 6,
             maxNeighborsPerNode: options.maxNeighborsPerNode || 12,
             adaptivePathfinding: options.adaptivePathfinding !== false,
             predictiveLookaheadMs: options.predictiveLookaheadMs || 240,
             maxDynamicJumpBoost: options.maxDynamicJumpBoost || 0.45,
-            maxDynamicGoalCandidates: options.maxDynamicGoalCandidates || 12,
             climbAggression: options.climbAggression || 1,
             dropAggression: options.dropAggression || 1,
             minMoveDistance: options.minMoveDistance || 6,
@@ -489,10 +487,6 @@ class SmartBlob {
         const maxJumpX = this.config.maxJumpX * boost;
         const maxJumpUp = this.config.maxJumpUp * (1 + 0.32 * urgency + 0.42 * wantsUp * climbAggression);
         const maxDropDown = this.config.maxDropDown * (1 + 0.25 * urgency + 0.34 * wantsDown * dropAggression);
-        const goalCandidates = Math.round(
-            this.config.pathGoalCandidates +
-            (this.config.maxDynamicGoalCandidates - this.config.pathGoalCandidates) * (urgency * 0.7 + wantsUp * 0.3 * climbAggression)
-        );
         const neighborLimit = Math.round(this.config.maxNeighborsPerNode + 4 * urgency);
         const heuristicWeight = 1 + 0.25 * urgency;
 
@@ -505,7 +499,6 @@ class SmartBlob {
             maxJumpX,
             maxJumpUp,
             maxDropDown,
-            goalCandidates,
             neighborLimit,
             heuristicWeight,
             targetX: this.clamp(effectiveTargetX, 0, this.width),
@@ -596,6 +589,7 @@ class SmartBlob {
         const graphMaxJumpUp = this.config.maxJumpUp * 1.8;
         const graphMaxDropDown = this.config.maxDropDown * 1.8;
         const maxNeighborsPerNode = this.config.maxNeighborsPerNode;
+        const xBucketSize = Math.max(32, graphMaxJumpX);
 
         const costBetween = (fromNode, toNode) => {
             const dx = toNode.x - fromNode.x;
@@ -638,10 +632,29 @@ class SmartBlob {
             }
         }
 
+        const nodeIdsByXBucket = new Map();
+        for (const node of uniqueNodes) {
+            const bucketId = Math.floor(node.x / xBucketSize);
+            if (!nodeIdsByXBucket.has(bucketId)) {
+                nodeIdsByXBucket.set(bucketId, []);
+            }
+            nodeIdsByXBucket.get(bucketId).push(node.id);
+        }
+
         for (const fromNode of uniqueNodes) {
             const reachable = [];
 
-            for (const toNode of uniqueNodes) {
+            const fromBucketId = Math.floor(fromNode.x / xBucketSize);
+            const candidateNodeIds = [];
+            for (let bucketId = fromBucketId - 1; bucketId <= fromBucketId + 1; bucketId++) {
+                const bucketNodeIds = nodeIdsByXBucket.get(bucketId);
+                if (bucketNodeIds && bucketNodeIds.length > 0) {
+                    candidateNodeIds.push(...bucketNodeIds);
+                }
+            }
+
+            for (const toNodeId of candidateNodeIds) {
+                const toNode = uniqueNodes[toNodeId];
                 if (fromNode.id === toNode.id) continue;
                 const dx = toNode.x - fromNode.x;
                 const dy = toNode.y - fromNode.y;
@@ -745,8 +758,8 @@ class SmartBlob {
         return { startNode, startEdges };
     }
 
-    heuristicCost(a, b) {
-        return Math.hypot(a.x - b.x, a.y - b.y);
+    heuristicCost(a, b, weight = 1) {
+        return Math.hypot(a.x - b.x, a.y - b.y) * weight;
     }
 
     reconstructPath(cameFrom, currentId) {
@@ -782,6 +795,12 @@ class SmartBlob {
         const queue = new MinPriorityQueue();
         const visited = new Set();
         let expandedNodes = 0;
+        const blobHalfSize = this.config.blobSize / 2;
+        const goalNode = {
+            x: limits.targetX - blobHalfSize,
+            y: limits.targetY - blobHalfSize
+        };
+        const heuristicWeight = Number.isFinite(limits.heuristicWeight) ? limits.heuristicWeight : 1;
         const startTraversalLimits = {
             ...limits,
             maxJumpX: limits.maxJumpX * 1.35,
@@ -792,7 +811,7 @@ class SmartBlob {
         const cameFrom = new Map();
         const gScore = new Map();
         gScore.set(startId, 0);
-        queue.push(startId, 0);
+        queue.push(startId, this.heuristicCost(startNode, goalNode, heuristicWeight));
 
         while (queue.size() > 0) {
             const currentEntry = queue.pop();
@@ -820,7 +839,8 @@ class SmartBlob {
 
                 cameFrom.set(edge.to, currentId);
                 gScore.set(edge.to, tentativeG);
-                queue.push(edge.to, tentativeG);
+                const fScore = tentativeG + this.heuristicCost(nextNode, goalNode, heuristicWeight);
+                queue.push(edge.to, fScore);
             }
         }
 
@@ -1439,13 +1459,25 @@ class SmartBlob {
         }
     }
 
+    destroy() {
+        this.stop();
+        if (this.canvas?.parentNode) {
+            this.canvas.parentNode.removeChild(this.canvas);
+        }
+        this.cachedGraph = null;
+        this.canvas = null;
+        this.ctx = null;
+    }
+
     stop() {
         if (this.rafId) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;
         }
         this.unbindEvents();
-        this.ctx.clearRect(0, 0, this.width, this.height);
+        if (this.ctx) {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+        }
     }
 }
 

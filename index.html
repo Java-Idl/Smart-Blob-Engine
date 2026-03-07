@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pixel Blob Jumper</title>
+    <title>Smart Blob Engine</title>
     <style>
         :root {
             --bg-top: #240038;
@@ -16,6 +16,10 @@
             --panel-border: rgba(255, 255, 255, 0.22);
             --text-main: #e8efff;
             --text-dim: #95a4c7;
+            --button-text: #08040f;
+            --status-good: #7bffb8;
+            --status-warn: #ffd26e;
+            --status-bad: #ff6f7a;
         }
 
         html, body {
@@ -155,7 +159,7 @@
         .ui-layer p {
             margin: 5px 0 0;
             font-size: 13px;
-            color: #ffffff;
+            color: var(--text-main);
         }
 
         .studio-panel {
@@ -191,8 +195,8 @@
             font-size: 12px;
             font-weight: 700;
             cursor: pointer;
-            background: #9ff9ff;
-            color: #08040f;
+            background: var(--accent-cyan);
+            color: var(--button-text);
         }
 
         .studio-head {
@@ -252,13 +256,13 @@
             font-family: inherit;
             font-size: 12px;
             cursor: pointer;
-            color: #08040f;
-            background: #9ff9ff;
+            color: var(--button-text);
+            background: var(--accent-cyan);
         }
 
         .btn-grid button:hover { filter: brightness(1.08); }
-        .btn-grid button.alt { background: #ff8dc8; }
-        .btn-grid button.warn { background: #ffd08f; }
+        .btn-grid button.alt { background: var(--accent-pink); }
+        .btn-grid button.warn { background: var(--sun-color); }
 
         .preset-grid button {
             width: 100%;
@@ -269,8 +273,8 @@
             font-family: inherit;
             font-size: 11px;
             cursor: pointer;
-            color: #08040f;
-            background: #bafaff;
+            color: var(--button-text);
+            background: var(--accent-cyan);
         }
 
         .preset-grid button:hover { filter: brightness(1.08); }
@@ -280,9 +284,9 @@
             font-size: 10px;
             line-height: 1.2;
             color: var(--text-dim);
-            white-space: nowrap;
+            white-space: normal;
+            overflow-wrap: anywhere;
             overflow: hidden;
-            text-overflow: ellipsis;
             opacity: 0;
             max-height: 0;
             transition: opacity 120ms ease, max-height 120ms ease;
@@ -292,7 +296,7 @@
         .preset-item:hover .preset-help,
         .preset-item:focus-within .preset-help {
             opacity: 1;
-            max-height: 14px;
+            max-height: 34px;
         }
 
         .tune-row {
@@ -308,7 +312,7 @@
         }
 
         .tune-row .name { color: var(--text-main); }
-        .tune-row .val { color: #fff; font-weight: 700; }
+        .tune-row .val { color: var(--text-main); font-weight: 700; }
         .tune-row input[type="range"] { width: 100%; accent-color: #00f2ff; }
 
         .metric-row {
@@ -321,14 +325,14 @@
 
         .metric-key { color: var(--text-dim); }
         .metric-val {
-            color: #fff;
+            color: var(--text-main);
             font-weight: 700;
             transition: color 120ms ease;
         }
 
-        .metric-val.status-good { color: #7bffb8; }
-        .metric-val.status-warn { color: #ffd26e; }
-        .metric-val.status-bad { color: #ff6f7a; }
+        .metric-val.status-good { color: var(--status-good); }
+        .metric-val.status-warn { color: var(--status-warn); }
+        .metric-val.status-bad { color: var(--status-bad); }
 
         .stress-report {
             margin-top: 8px;
@@ -346,7 +350,7 @@
             position: fixed;
             width: 18px;
             height: 18px;
-            border: 2px solid #fff;
+            border: 2px solid var(--text-main);
             border-radius: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
@@ -364,46 +368,46 @@
         <div class="grid-floor"></div>
 
         <div class="ui-layer">
-            <h1>NEON JUMP</h1>
-            <p>Guide the blob • adaptive A* • flat-motion tuning</p>
+            <h1>Smart Blob</h1>
+            <p>Move the mouse to guide the blob.</p>
         </div>
 
-        <button id="sidebar-toggle" class="sidebar-toggle" onclick="toggleSidebar()">Hide Panel</button>
+        <button id="sidebar-toggle" class="sidebar-toggle" onclick="toggleSidebar()">Show Panel</button>
 
-        <aside id="studio-panel" class="studio-panel">
+        <aside id="studio-panel" class="studio-panel collapsed">
             <div class="studio-head">
-                <div class="title">Blob Studio</div>
-                <div class="subtitle">Controls + Pathfinding HUD</div>
+                <div class="title">Control Panel</div>
+                <div class="subtitle">Controls and metrics</div>
             </div>
 
             <div class="section">
-                <div class="label">Actions</div>
+                <div class="label">Controls</div>
                 <div class="btn-grid">
-                    <button onclick="restartEngine()">Restart Engine</button>
+                    <button onclick="restartEngine()">Restart</button>
                     <button class="alt" onclick="regeneratePlatforms()">Regenerate Platforms</button>
-                    <button id="path-debug-toggle" class="warn" onclick="togglePathDebugMode()">Path Lines: Off</button>
-                    <button id="path-stress-toggle" class="alt" onclick="runPathStressTest()">Path Stress: 10s</button>
-                    <button id="stress-report-toggle" onclick="toggleStressReport()">Stress Report: On</button>
+                    <button id="path-debug-toggle" class="warn" onclick="togglePathDebugMode()">Debug Paths: Off</button>
+                    <button id="path-stress-toggle" class="alt" onclick="runPathStressTest()">Stress Test: 10s</button>
+                    <button id="stress-report-toggle" onclick="toggleStressReport()">Report: On</button>
                     <button onclick="resetMetrics()">Reset Metrics</button>
                 </div>
-                <div id="stress-report-output" class="stress-report">Run Path Stress to generate a mini report.</div>
+                <div id="stress-report-output" class="stress-report">Run stress test to view results.</div>
             </div>
 
             <div class="section">
-                <div class="label">Live Tuning</div>
+                <div class="label">Settings</div>
 
                 <div class="preset-grid" style="margin-bottom: 8px;">
                     <div class="preset-item">
-                        <button onclick="applyPreset('arcade')">Arcade</button>
-                        <div class="preset-help">Fast, predictive, high-arc chase.</div>
+                        <button onclick="applyPreset('arcade')">Fast</button>
+                        <div class="preset-help">Fast movement and quick response.</div>
                     </div>
                     <div class="preset-item">
-                        <button onclick="applyPreset('flat')">Flat Precision</button>
-                        <div class="preset-help">Low arc, short steps, level tracking.</div>
+                        <button onclick="applyPreset('flat')">Flat</button>
+                        <div class="preset-help">Low arc and level movement.</div>
                     </div>
                     <div class="preset-item">
-                        <button onclick="applyPreset('classic')">Classic Blob</button>
-                        <div class="preset-help">Balanced jumps with calmer pacing.</div>
+                        <button onclick="applyPreset('classic')">Balanced</button>
+                        <div class="preset-help">Balanced movement and pace.</div>
                     </div>
                 </div>
 
@@ -439,17 +443,17 @@
             </div>
 
             <div class="section">
-                <div class="label">Pathfinding HUD</div>
-                <div class="metric-row"><span class="metric-key">graphNodes</span><span class="metric-val" id="hud-graph-nodes">0</span></div>
-                <div class="metric-row"><span class="metric-key">graphEdges</span><span class="metric-val" id="hud-graph-edges">0</span></div>
-                <div class="metric-row"><span class="metric-key">startOptions</span><span class="metric-val" id="hud-start-options">0</span></div>
-                <div class="metric-row"><span class="metric-key">pathLength</span><span class="metric-val" id="hud-path-length">0</span></div>
-                <div class="metric-row"><span class="metric-key">targetError</span><span class="metric-val" id="hud-target-error">0.00</span></div>
-                <div class="metric-row"><span class="metric-key">lastHopDist</span><span class="metric-val" id="hud-last-hop-distance">0.00</span></div>
-                <div class="metric-row"><span class="metric-key">expanded</span><span class="metric-val" id="hud-expanded">0</span></div>
-                <div class="metric-row"><span class="metric-key">solveMs</span><span class="metric-val" id="hud-solve-ms">0.00</span></div>
-                <div class="metric-row"><span class="metric-key">fallbacks</span><span class="metric-val" id="hud-fallbacks">0</span></div>
-                <div class="metric-row"><span class="metric-key">mode</span><span class="metric-val" id="hud-mode">idle</span></div>
+                <div class="label">Metrics</div>
+                <div class="metric-row"><span class="metric-key">Nodes</span><span class="metric-val" id="hud-graph-nodes">0</span></div>
+                <div class="metric-row"><span class="metric-key">Edges</span><span class="metric-val" id="hud-graph-edges">0</span></div>
+                <div class="metric-row"><span class="metric-key">Starts</span><span class="metric-val" id="hud-start-options">0</span></div>
+                <div class="metric-row"><span class="metric-key">Path</span><span class="metric-val" id="hud-path-length">0</span></div>
+                <div class="metric-row"><span class="metric-key">Error</span><span class="metric-val" id="hud-target-error">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">Hop</span><span class="metric-val" id="hud-last-hop-distance">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">Expanded</span><span class="metric-val" id="hud-expanded">0</span></div>
+                <div class="metric-row"><span class="metric-key">Solve ms</span><span class="metric-val" id="hud-solve-ms">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">Fallbacks</span><span class="metric-val" id="hud-fallbacks">0</span></div>
+                <div class="metric-row"><span class="metric-key">Mode</span><span class="metric-val" id="hud-mode">idle</span></div>
             </div>
         </aside>
 
@@ -488,13 +492,14 @@
                 this.hudRafId = null;
                 this.lastFallbackCount = 0;
                 this.fallbackEvents = [];
-                this.isSidebarCollapsed = false;
+                this.isSidebarCollapsed = true;
                 this.pathStressIntervalId = null;
                 this.pathStressTimeoutId = null;
                 this.pathStressButtonRafId = null;
                 this.pathStressEndTime = 0;
                 this.stressReportEnabled = true;
                 this.currentStressStats = null;
+                this.defaultStressReportText = 'Run stress test to view results.';
 
                 this.onResize = this.onResize.bind(this);
                 this.onMouseMove = this.onMouseMove.bind(this);
@@ -607,13 +612,41 @@
 
             resetMetrics() {
                 if (!this.game) return;
+
+                this.stopPathStressTest(false, 0);
+
                 if (typeof this.game.resetMetrics === 'function') {
                     this.game.resetMetrics();
                 } else if (this.game.metrics) {
                     this.game.metrics.reset(this.game.defaultMetrics || {});
                 }
+
                 this.lastFallbackCount = 0;
                 this.fallbackEvents.length = 0;
+                this.currentStressStats = null;
+
+                if (this.stressReportOutput) {
+                    this.stressReportOutput.textContent = this.defaultStressReportText;
+                    this.stressReportOutput.style.display = this.stressReportEnabled ? 'block' : 'none';
+                }
+
+                document.getElementById('hud-graph-nodes').textContent = '0';
+                document.getElementById('hud-graph-edges').textContent = '0';
+                document.getElementById('hud-start-options').textContent = '0';
+                document.getElementById('hud-path-length').textContent = '0';
+                document.getElementById('hud-target-error').textContent = '0.00';
+                document.getElementById('hud-last-hop-distance').textContent = '0.00';
+                document.getElementById('hud-expanded').textContent = '0';
+                document.getElementById('hud-solve-ms').textContent = '0.00';
+                document.getElementById('hud-fallbacks').textContent = '0';
+                document.getElementById('hud-mode').textContent = 'idle';
+
+                this.setStatusClass('hud-solve-ms', 'status-good');
+                this.setStatusClass('hud-fallbacks', 'status-good');
+                this.setStatusClass('hud-mode', 'status-good');
+                this.setStatusClass('hud-target-error', 'status-good');
+                this.setStatusClass('hud-start-options', 'status-good');
+                this.setStatusClass('hud-path-length', 'status-good');
             }
 
             setStatusClass(elementId, status) {
@@ -696,20 +729,20 @@
             syncPathDebugButton() {
                 if (!this.pathDebugToggleButton || !this.game) return;
                 const mode = this.game.debug?.mode || 'off';
-                this.pathDebugToggleButton.textContent = `Path Lines: ${mode}`;
+                this.pathDebugToggleButton.textContent = `Debug Paths: ${mode}`;
             }
 
             toggleStressReport() {
                 this.stressReportEnabled = !this.stressReportEnabled;
                 if (this.stressReportToggleButton) {
-                    this.stressReportToggleButton.textContent = this.stressReportEnabled ? 'Stress Report: On' : 'Stress Report: Off';
+                    this.stressReportToggleButton.textContent = this.stressReportEnabled ? 'Report: On' : 'Report: Off';
                     this.stressReportToggleButton.classList.toggle('warn', !this.stressReportEnabled);
                 }
 
                 if (this.stressReportOutput) {
                     if (this.stressReportEnabled) {
                         if (!this.stressReportOutput.textContent.trim()) {
-                            this.stressReportOutput.textContent = 'Run Path Stress to generate a mini report.';
+                            this.stressReportOutput.textContent = this.defaultStressReportText;
                         }
                         this.stressReportOutput.style.display = 'block';
                     } else {
@@ -721,7 +754,7 @@
             renderStressReport(stats, runMs) {
                 if (!this.stressReportEnabled || !this.stressReportOutput || !stats) return;
                 this.stressReportOutput.style.display = 'block';
-                this.stressReportOutput.textContent = `Stress Report (${(runMs / 1000).toFixed(1)}s) · max solveMs ${stats.maxSolveMs.toFixed(2)} · fallback spikes ${stats.fallbackSpikes} · blocked count ${stats.blockedCount}`;
+                this.stressReportOutput.textContent = `Stress test ${(runMs / 1000).toFixed(1)}s. Max solveMs ${stats.maxSolveMs.toFixed(2)}. Fallback spikes ${stats.fallbackSpikes}. Blocked count ${stats.blockedCount}.`;
             }
 
             sampleStressMetrics() {
@@ -757,7 +790,7 @@
 
                 this.pathStressEndTime = 0;
                 if (this.pathStressToggleButton) {
-                    this.pathStressToggleButton.textContent = 'Path Stress: 10s';
+                    this.pathStressToggleButton.textContent = 'Stress Test: 10s';
                     this.pathStressToggleButton.classList.remove('warn');
                     this.pathStressToggleButton.classList.add('alt');
                 }
@@ -789,7 +822,7 @@
                 const updateStressButton = () => {
                     if (!this.pathStressToggleButton || !this.pathStressEndTime) return;
                     const remainingMs = Math.max(0, this.pathStressEndTime - performance.now());
-                    this.pathStressToggleButton.textContent = `Path Stress: ${(remainingMs / 1000).toFixed(1)}s`;
+                    this.pathStressToggleButton.textContent = `Stress Test: ${(remainingMs / 1000).toFixed(1)}s`;
                     if (remainingMs > 0 && this.pathStressTimeoutId) {
                         this.pathStressButtonRafId = requestAnimationFrame(updateStressButton);
                     }
@@ -855,7 +888,7 @@
                 this.gameContainer.appendChild(platform);
             }
 
-            generatePlatforms() {
+            generatePlatforms(shouldRescanGamePlatforms = true) {
                 this.clearPlatforms();
                 const width = window.innerWidth;
                 const height = window.innerHeight;
@@ -880,14 +913,18 @@
                     currentY -= (110 + Math.random() * 90);
                 }
 
-                if (this.game) {
+                if (shouldRescanGamePlatforms && this.game) {
                     this.game.scanPlatforms('.platform');
                 }
             }
 
             bootEngine() {
                 if (this.game) {
-                    this.game.stop();
+                    if (typeof this.game.destroy === 'function') {
+                        this.game.destroy();
+                    } else {
+                        this.game.stop();
+                    }
                 }
 
                 const tune = this.getTuneValues();
@@ -937,10 +974,9 @@
             }
 
             onResize() {
-                this.generatePlatforms();
+                this.generatePlatforms(false);
                 if (this.game) {
                     this.game.resize();
-                    this.game.scanPlatforms('.platform');
                 }
             }
         }
