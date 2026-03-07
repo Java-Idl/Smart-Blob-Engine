@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pixel Blob Jumper</title>
+    <title>Smart Blob Engine</title>
     <style>
         :root {
             --bg-top: #240038;
@@ -16,6 +16,10 @@
             --panel-border: rgba(255, 255, 255, 0.22);
             --text-main: #e8efff;
             --text-dim: #95a4c7;
+            --button-text: #08040f;
+            --status-good: #7bffb8;
+            --status-warn: #ffd26e;
+            --status-bad: #ff6f7a;
         }
 
         html, body {
@@ -155,23 +159,44 @@
         .ui-layer p {
             margin: 5px 0 0;
             font-size: 13px;
-            color: #ffffff;
+            color: var(--text-main);
         }
 
         .studio-panel {
             position: fixed;
-            top: 18px;
-            right: 18px;
+            top: 0;
+            right: 0;
             z-index: 95;
-            width: 280px;
-            max-height: calc(100vh - 36px);
+            width: min(320px, 86vw);
+            height: 100vh;
             overflow: auto;
             background: var(--panel-bg);
-            border: 1px solid var(--panel-border);
-            border-radius: 12px;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+            border-left: 1px solid var(--panel-border);
+            box-shadow: -10px 0 30px rgba(0, 0, 0, 0.45);
             backdrop-filter: blur(2px);
             color: var(--text-main);
+            transform: translateX(0);
+            transition: transform 180ms ease;
+        }
+
+        .studio-panel.collapsed {
+            transform: translateX(100%);
+        }
+
+        .sidebar-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 96;
+            border: 0;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            background: var(--accent-cyan);
+            color: var(--button-text);
         }
 
         .studio-head {
@@ -216,6 +241,12 @@
             gap: 6px;
         }
 
+        .preset-item {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+        }
+
         .btn-grid button {
             width: 100%;
             border: 0;
@@ -225,13 +256,13 @@
             font-family: inherit;
             font-size: 12px;
             cursor: pointer;
-            color: #08040f;
-            background: #9ff9ff;
+            color: var(--button-text);
+            background: var(--accent-cyan);
         }
 
         .btn-grid button:hover { filter: brightness(1.08); }
-        .btn-grid button.alt { background: #ff8dc8; }
-        .btn-grid button.warn { background: #ffd08f; }
+        .btn-grid button.alt { background: var(--accent-pink); }
+        .btn-grid button.warn { background: var(--sun-color); }
 
         .preset-grid button {
             width: 100%;
@@ -242,11 +273,31 @@
             font-family: inherit;
             font-size: 11px;
             cursor: pointer;
-            color: #08040f;
-            background: #bafaff;
+            color: var(--button-text);
+            background: var(--accent-cyan);
         }
 
         .preset-grid button:hover { filter: brightness(1.08); }
+
+        .preset-help {
+            margin-top: 3px;
+            font-size: 10px;
+            line-height: 1.2;
+            color: var(--text-dim);
+            white-space: normal;
+            overflow-wrap: anywhere;
+            overflow: hidden;
+            opacity: 0;
+            max-height: 0;
+            transition: opacity 120ms ease, max-height 120ms ease;
+            pointer-events: none;
+        }
+
+        .preset-item:hover .preset-help,
+        .preset-item:focus-within .preset-help {
+            opacity: 1;
+            max-height: 34px;
+        }
 
         .tune-row {
             margin: 8px 0;
@@ -261,7 +312,7 @@
         }
 
         .tune-row .name { color: var(--text-main); }
-        .tune-row .val { color: #fff; font-weight: 700; }
+        .tune-row .val { color: var(--text-main); font-weight: 700; }
         .tune-row input[type="range"] { width: 100%; accent-color: #00f2ff; }
 
         .metric-row {
@@ -274,20 +325,32 @@
 
         .metric-key { color: var(--text-dim); }
         .metric-val {
-            color: #fff;
+            color: var(--text-main);
             font-weight: 700;
             transition: color 120ms ease;
         }
 
-        .metric-val.status-good { color: #7bffb8; }
-        .metric-val.status-warn { color: #ffd26e; }
-        .metric-val.status-bad { color: #ff6f7a; }
+        .metric-val.status-good { color: var(--status-good); }
+        .metric-val.status-warn { color: var(--status-warn); }
+        .metric-val.status-bad { color: var(--status-bad); }
+
+        .stress-report {
+            margin-top: 8px;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.24);
+            color: var(--text-dim);
+            font-size: 11px;
+            line-height: 1.35;
+            min-height: 34px;
+        }
 
         #cursor-target {
             position: fixed;
             width: 18px;
             height: 18px;
-            border: 2px solid #fff;
+            border: 2px solid var(--text-main);
             border-radius: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
@@ -305,33 +368,47 @@
         <div class="grid-floor"></div>
 
         <div class="ui-layer">
-            <h1>NEON JUMP</h1>
-            <p>Guide the blob • adaptive A* • flat-motion tuning</p>
+            <h1>Smart Blob</h1>
+            <p>Move the mouse to guide the blob.</p>
         </div>
 
-        <aside class="studio-panel">
+        <button id="sidebar-toggle" class="sidebar-toggle" onclick="toggleSidebar()">Show Panel</button>
+
+        <aside id="studio-panel" class="studio-panel collapsed">
             <div class="studio-head">
-                <div class="title">Blob Studio</div>
-                <div class="subtitle">Controls + Pathfinding HUD</div>
+                <div class="title">Control Panel</div>
+                <div class="subtitle">Controls and metrics</div>
             </div>
 
             <div class="section">
-                <div class="label">Actions</div>
+                <div class="label">Controls</div>
                 <div class="btn-grid">
-                    <button onclick="restartEngine()">Restart Engine</button>
+                    <button onclick="restartEngine()">Restart</button>
                     <button class="alt" onclick="regeneratePlatforms()">Regenerate Platforms</button>
-                    <button class="warn" onclick="togglePathDebug()">Toggle Path Lines</button>
+                    <button id="path-debug-toggle" class="warn" onclick="togglePathDebugMode()">Debug Paths: Off</button>
+                    <button id="path-stress-toggle" class="alt" onclick="runPathStressTest()">Stress Test: 10s</button>
+                    <button id="stress-report-toggle" onclick="toggleStressReport()">Report: On</button>
                     <button onclick="resetMetrics()">Reset Metrics</button>
                 </div>
+                <div id="stress-report-output" class="stress-report">Run stress test to view results.</div>
             </div>
 
             <div class="section">
-                <div class="label">Live Tuning</div>
+                <div class="label">Settings</div>
 
                 <div class="preset-grid" style="margin-bottom: 8px;">
-                    <button onclick="applyPreset('arcade')">Arcade</button>
-                    <button onclick="applyPreset('flat')">Flat Precision</button>
-                    <button onclick="applyPreset('classic')">Classic Blob</button>
+                    <div class="preset-item">
+                        <button onclick="applyPreset('arcade')">Fast</button>
+                        <div class="preset-help">Fast movement and quick response.</div>
+                    </div>
+                    <div class="preset-item">
+                        <button onclick="applyPreset('flat')">Flat</button>
+                        <div class="preset-help">Low arc and level movement.</div>
+                    </div>
+                    <div class="preset-item">
+                        <button onclick="applyPreset('classic')">Balanced</button>
+                        <div class="preset-help">Balanced movement and pace.</div>
+                    </div>
                 </div>
 
                 <div class="tune-row">
@@ -366,15 +443,17 @@
             </div>
 
             <div class="section">
-                <div class="label">Pathfinding HUD</div>
-                <div class="metric-row"><span class="metric-key">urgency</span><span class="metric-val" id="hud-urgency">0.00</span></div>
-                <div class="metric-row"><span class="metric-key">maxJumpX</span><span class="metric-val" id="hud-max-jump-x">0</span></div>
-                <div class="metric-row"><span class="metric-key">pathLength</span><span class="metric-val" id="hud-path-length">0</span></div>
-                <div class="metric-row"><span class="metric-key">bestTargetDist</span><span class="metric-val" id="hud-best-target-distance">0.00</span></div>
-                <div class="metric-row"><span class="metric-key">expanded</span><span class="metric-val" id="hud-expanded">0</span></div>
-                <div class="metric-row"><span class="metric-key">solveMs</span><span class="metric-val" id="hud-solve-ms">0.00</span></div>
-                <div class="metric-row"><span class="metric-key">fallbacks</span><span class="metric-val" id="hud-fallbacks">0</span></div>
-                <div class="metric-row"><span class="metric-key">mode</span><span class="metric-val" id="hud-mode">idle</span></div>
+                <div class="label">Metrics</div>
+                <div class="metric-row"><span class="metric-key">Nodes</span><span class="metric-val" id="hud-graph-nodes">0</span></div>
+                <div class="metric-row"><span class="metric-key">Edges</span><span class="metric-val" id="hud-graph-edges">0</span></div>
+                <div class="metric-row"><span class="metric-key">Starts</span><span class="metric-val" id="hud-start-options">0</span></div>
+                <div class="metric-row"><span class="metric-key">Path</span><span class="metric-val" id="hud-path-length">0</span></div>
+                <div class="metric-row"><span class="metric-key">Error</span><span class="metric-val" id="hud-target-error">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">Hop</span><span class="metric-val" id="hud-last-hop-distance">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">Expanded</span><span class="metric-val" id="hud-expanded">0</span></div>
+                <div class="metric-row"><span class="metric-key">Solve ms</span><span class="metric-val" id="hud-solve-ms">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">Fallbacks</span><span class="metric-val" id="hud-fallbacks">0</span></div>
+                <div class="metric-row"><span class="metric-key">Mode</span><span class="metric-val" id="hud-mode">idle</span></div>
             </div>
         </aside>
 
@@ -388,6 +467,12 @@
             constructor() {
                 this.gameContainer = document.getElementById('game-container');
                 this.cursorTarget = document.getElementById('cursor-target');
+                this.sidebarPanel = document.getElementById('studio-panel');
+                this.sidebarToggleButton = document.getElementById('sidebar-toggle');
+                this.pathDebugToggleButton = document.getElementById('path-debug-toggle');
+                this.pathStressToggleButton = document.getElementById('path-stress-toggle');
+                this.stressReportToggleButton = document.getElementById('stress-report-toggle');
+                this.stressReportOutput = document.getElementById('stress-report-output');
 
                 this.climbAggressionInput = document.getElementById('climb-aggr');
                 this.dropAggressionInput = document.getElementById('drop-aggr');
@@ -407,6 +492,14 @@
                 this.hudRafId = null;
                 this.lastFallbackCount = 0;
                 this.fallbackEvents = [];
+                this.isSidebarCollapsed = true;
+                this.pathStressIntervalId = null;
+                this.pathStressTimeoutId = null;
+                this.pathStressButtonRafId = null;
+                this.pathStressEndTime = 0;
+                this.stressReportEnabled = true;
+                this.currentStressStats = null;
+                this.defaultStressReportText = 'Run stress test to view results.';
 
                 this.onResize = this.onResize.bind(this);
                 this.onMouseMove = this.onMouseMove.bind(this);
@@ -418,6 +511,7 @@
                 this.updateTuneLabels();
                 this.generatePlatforms();
                 this.bootEngine();
+                this.syncPathDebugButton();
                 this.hudRafId = requestAnimationFrame(this.updateHud);
             }
 
@@ -468,27 +562,27 @@
             applyPreset(name) {
                 const presets = {
                     arcade: {
-                        climbAggression: 1.35,
-                        dropAggression: 1.25,
-                        minMoveDistance: 4.5,
-                        flatMoveBias: 1.2,
-                        flatArcMax: 52,
-                        targetPredictionWeight: 0.45
+                        climbAggression: 2.15,
+                        dropAggression: 1.85,
+                        minMoveDistance: 1.5,
+                        flatMoveBias: 0.65,
+                        flatArcMax: 80,
+                        targetPredictionWeight: 0.90
                     },
                     flat: {
-                        climbAggression: 1.1,
-                        dropAggression: 1.0,
-                        minMoveDistance: 2.0,
-                        flatMoveBias: 2.4,
-                        flatArcMax: 10,
-                        targetPredictionWeight: 0.15
+                        climbAggression: 0.70,
+                        dropAggression: 0.70,
+                        minMoveDistance: 0.5,
+                        flatMoveBias: 3.0,
+                        flatArcMax: 4,
+                        targetPredictionWeight: 0.10
                     },
                     classic: {
-                        climbAggression: 1.0,
-                        dropAggression: 1.0,
-                        minMoveDistance: 6.0,
+                        climbAggression: 1.00,
+                        dropAggression: 1.00,
+                        minMoveDistance: 7.0,
                         flatMoveBias: 1.0,
-                        flatArcMax: 64,
+                        flatArcMax: 56,
                         targetPredictionWeight: 0.0
                     }
                 };
@@ -518,13 +612,41 @@
 
             resetMetrics() {
                 if (!this.game) return;
+
+                this.stopPathStressTest(false, 0);
+
                 if (typeof this.game.resetMetrics === 'function') {
                     this.game.resetMetrics();
                 } else if (this.game.metrics) {
                     this.game.metrics.reset(this.game.defaultMetrics || {});
                 }
+
                 this.lastFallbackCount = 0;
                 this.fallbackEvents.length = 0;
+                this.currentStressStats = null;
+
+                if (this.stressReportOutput) {
+                    this.stressReportOutput.textContent = this.defaultStressReportText;
+                    this.stressReportOutput.style.display = this.stressReportEnabled ? 'block' : 'none';
+                }
+
+                document.getElementById('hud-graph-nodes').textContent = '0';
+                document.getElementById('hud-graph-edges').textContent = '0';
+                document.getElementById('hud-start-options').textContent = '0';
+                document.getElementById('hud-path-length').textContent = '0';
+                document.getElementById('hud-target-error').textContent = '0.00';
+                document.getElementById('hud-last-hop-distance').textContent = '0.00';
+                document.getElementById('hud-expanded').textContent = '0';
+                document.getElementById('hud-solve-ms').textContent = '0.00';
+                document.getElementById('hud-fallbacks').textContent = '0';
+                document.getElementById('hud-mode').textContent = 'idle';
+
+                this.setStatusClass('hud-solve-ms', 'status-good');
+                this.setStatusClass('hud-fallbacks', 'status-good');
+                this.setStatusClass('hud-mode', 'status-good');
+                this.setStatusClass('hud-target-error', 'status-good');
+                this.setStatusClass('hud-start-options', 'status-good');
+                this.setStatusClass('hud-path-length', 'status-good');
             }
 
             setStatusClass(elementId, status) {
@@ -541,10 +663,12 @@
                 }
 
                 const metrics = this.getMetricsSnapshot();
-                const urgency = Number(metrics.urgency || 0);
-                const maxJumpX = Number(metrics.maxJumpX || 0);
+                const graphNodes = Number(metrics.graphNodes || 0);
+                const graphEdges = Number(metrics.graphEdges || 0);
+                const startOptions = Number(metrics.startOptions || 0);
                 const selectedPathLength = Number(metrics.selectedPathLength || 0);
-                const bestTargetDistance = Number(metrics.bestTargetDistance || 0);
+                const targetError = Number(metrics.targetError || 0);
+                const lastHopDistance = Number(metrics.lastHopDistance || 0);
                 const expandedNodes = Number(metrics.expandedNodes || 0);
                 const solveMs = Number(metrics.solveMs || 0);
                 const fallbackCount = Number(metrics.fallbackCount || 0);
@@ -564,10 +688,12 @@
                 }
                 const fallbackSpikeCount = this.fallbackEvents.length;
 
-                document.getElementById('hud-urgency').textContent = urgency.toFixed(2);
-                document.getElementById('hud-max-jump-x').textContent = Math.round(maxJumpX).toString();
+                document.getElementById('hud-graph-nodes').textContent = graphNodes.toString();
+                document.getElementById('hud-graph-edges').textContent = graphEdges.toString();
+                document.getElementById('hud-start-options').textContent = startOptions.toString();
                 document.getElementById('hud-path-length').textContent = selectedPathLength.toString();
-                document.getElementById('hud-best-target-distance').textContent = bestTargetDistance.toFixed(2);
+                document.getElementById('hud-target-error').textContent = targetError.toFixed(2);
+                document.getElementById('hud-last-hop-distance').textContent = lastHopDistance.toFixed(2);
                 document.getElementById('hud-expanded').textContent = expandedNodes.toString();
                 document.getElementById('hud-solve-ms').textContent = solveMs.toFixed(2);
                 document.getElementById('hud-fallbacks').textContent = fallbackCount.toString();
@@ -582,10 +708,168 @@
                 const modeStatus = mode === 'blocked' ? 'status-bad' : mode === 'fallback' ? 'status-warn' : 'status-good';
                 this.setStatusClass('hud-mode', modeStatus);
 
-                const targetDistStatus = bestTargetDistance > 120 ? 'status-bad' : bestTargetDistance > 45 ? 'status-warn' : 'status-good';
-                this.setStatusClass('hud-best-target-distance', targetDistStatus);
+                const targetErrorStatus = targetError > 120 ? 'status-bad' : targetError > 45 ? 'status-warn' : 'status-good';
+                this.setStatusClass('hud-target-error', targetErrorStatus);
+
+                const startOptionsStatus = startOptions <= 2 ? 'status-bad' : startOptions <= 6 ? 'status-warn' : 'status-good';
+                this.setStatusClass('hud-start-options', startOptionsStatus);
+
+                const pathLengthStatus = selectedPathLength <= 1 ? 'status-bad' : selectedPathLength <= 2 ? 'status-warn' : 'status-good';
+                this.setStatusClass('hud-path-length', pathLengthStatus);
 
                 this.hudRafId = requestAnimationFrame(this.updateHud);
+            }
+
+            toggleSidebar() {
+                this.isSidebarCollapsed = !this.isSidebarCollapsed;
+                this.sidebarPanel.classList.toggle('collapsed', this.isSidebarCollapsed);
+                this.sidebarToggleButton.textContent = this.isSidebarCollapsed ? 'Show Panel' : 'Hide Panel';
+            }
+
+            syncPathDebugButton() {
+                if (!this.pathDebugToggleButton || !this.game) return;
+                const mode = this.game.debug?.mode || 'off';
+                this.pathDebugToggleButton.textContent = `Debug Paths: ${mode}`;
+            }
+
+            toggleStressReport() {
+                this.stressReportEnabled = !this.stressReportEnabled;
+                if (this.stressReportToggleButton) {
+                    this.stressReportToggleButton.textContent = this.stressReportEnabled ? 'Report: On' : 'Report: Off';
+                    this.stressReportToggleButton.classList.toggle('warn', !this.stressReportEnabled);
+                }
+
+                if (this.stressReportOutput) {
+                    if (this.stressReportEnabled) {
+                        if (!this.stressReportOutput.textContent.trim()) {
+                            this.stressReportOutput.textContent = this.defaultStressReportText;
+                        }
+                        this.stressReportOutput.style.display = 'block';
+                    } else {
+                        this.stressReportOutput.style.display = 'none';
+                    }
+                }
+            }
+
+            renderStressReport(stats, runMs) {
+                if (!this.stressReportEnabled || !this.stressReportOutput || !stats) return;
+                this.stressReportOutput.style.display = 'block';
+                this.stressReportOutput.textContent = `Stress test ${(runMs / 1000).toFixed(1)}s. Max solveMs ${stats.maxSolveMs.toFixed(2)}. Fallback spikes ${stats.fallbackSpikes}. Blocked count ${stats.blockedCount}.`;
+            }
+
+            sampleStressMetrics() {
+                if (!this.currentStressStats) return;
+                const metrics = this.getMetricsSnapshot();
+                const solveMs = Number(metrics.solveMs || 0);
+                const fallbackCount = Number(metrics.fallbackCount || 0);
+                const mode = metrics.mode || 'idle';
+
+                this.currentStressStats.maxSolveMs = Math.max(this.currentStressStats.maxSolveMs, solveMs);
+                if (mode === 'blocked') {
+                    this.currentStressStats.blockedCount += 1;
+                }
+                if (fallbackCount > this.currentStressStats.lastFallbackCount) {
+                    this.currentStressStats.fallbackSpikes += (fallbackCount - this.currentStressStats.lastFallbackCount);
+                }
+                this.currentStressStats.lastFallbackCount = fallbackCount;
+            }
+
+            stopPathStressTest(completedRun = false, runMs = 0) {
+                if (this.pathStressIntervalId) {
+                    clearInterval(this.pathStressIntervalId);
+                    this.pathStressIntervalId = null;
+                }
+                if (this.pathStressTimeoutId) {
+                    clearTimeout(this.pathStressTimeoutId);
+                    this.pathStressTimeoutId = null;
+                }
+                if (this.pathStressButtonRafId) {
+                    cancelAnimationFrame(this.pathStressButtonRafId);
+                    this.pathStressButtonRafId = null;
+                }
+
+                this.pathStressEndTime = 0;
+                if (this.pathStressToggleButton) {
+                    this.pathStressToggleButton.textContent = 'Stress Test: 10s';
+                    this.pathStressToggleButton.classList.remove('warn');
+                    this.pathStressToggleButton.classList.add('alt');
+                }
+
+                if (completedRun) {
+                    this.renderStressReport(this.currentStressStats, runMs);
+                }
+                this.currentStressStats = null;
+            }
+
+            runPathStressTest() {
+                if (!this.game) return;
+
+                if (this.pathStressIntervalId || this.pathStressTimeoutId) {
+                    this.stopPathStressTest();
+                    return;
+                }
+
+                const durationMs = 10000;
+                this.pathStressEndTime = performance.now() + durationMs;
+                const metricsAtStart = this.getMetricsSnapshot();
+                this.currentStressStats = {
+                    maxSolveMs: 0,
+                    fallbackSpikes: 0,
+                    blockedCount: 0,
+                    lastFallbackCount: Number(metricsAtStart.fallbackCount || 0)
+                };
+
+                const updateStressButton = () => {
+                    if (!this.pathStressToggleButton || !this.pathStressEndTime) return;
+                    const remainingMs = Math.max(0, this.pathStressEndTime - performance.now());
+                    this.pathStressToggleButton.textContent = `Stress Test: ${(remainingMs / 1000).toFixed(1)}s`;
+                    if (remainingMs > 0 && this.pathStressTimeoutId) {
+                        this.pathStressButtonRafId = requestAnimationFrame(updateStressButton);
+                    }
+                };
+
+                const pushRandomStressTarget = () => {
+                    const width = this.game?.width || window.innerWidth;
+                    const height = this.game?.height || window.innerHeight;
+                    const edgeBias = Math.random();
+
+                    let targetX;
+                    let targetY;
+
+                    if (edgeBias < 0.35) {
+                        const edgeX = Math.random() < 0.5 ? 0.06 : 0.94;
+                        const edgeY = 0.08 + Math.random() * 0.84;
+                        targetX = width * edgeX;
+                        targetY = height * edgeY;
+                    } else if (edgeBias < 0.7) {
+                        targetX = Math.random() * width;
+                        targetY = (0.04 + Math.random() * 0.26) * height;
+                    } else {
+                        targetX = Math.random() * width;
+                        targetY = Math.random() * height;
+                    }
+
+                    this.game.clientMouse.x = targetX;
+                    this.game.clientMouse.y = targetY;
+
+                    this.cursorTarget.style.left = `${targetX}px`;
+                    this.cursorTarget.style.top = `${targetY}px`;
+
+                    this.sampleStressMetrics();
+                };
+
+                if (this.pathStressToggleButton) {
+                    this.pathStressToggleButton.classList.remove('alt');
+                    this.pathStressToggleButton.classList.add('warn');
+                }
+
+                updateStressButton();
+                pushRandomStressTarget();
+                this.pathStressIntervalId = setInterval(pushRandomStressTarget, 90);
+                this.pathStressTimeoutId = setTimeout(() => {
+                    this.sampleStressMetrics();
+                    this.stopPathStressTest(true, durationMs);
+                }, durationMs);
             }
 
             clearPlatforms() {
@@ -604,7 +888,7 @@
                 this.gameContainer.appendChild(platform);
             }
 
-            generatePlatforms() {
+            generatePlatforms(shouldRescanGamePlatforms = true) {
                 this.clearPlatforms();
                 const width = window.innerWidth;
                 const height = window.innerHeight;
@@ -629,14 +913,18 @@
                     currentY -= (110 + Math.random() * 90);
                 }
 
-                if (this.game) {
+                if (shouldRescanGamePlatforms && this.game) {
                     this.game.scanPlatforms('.platform');
                 }
             }
 
             bootEngine() {
                 if (this.game) {
-                    this.game.stop();
+                    if (typeof this.game.destroy === 'function') {
+                        this.game.destroy();
+                    } else {
+                        this.game.stop();
+                    }
                 }
 
                 const tune = this.getTuneValues();
@@ -660,11 +948,25 @@
                 this.lastFallbackCount = 0;
                 this.fallbackEvents.length = 0;
                 this.game.scanPlatforms('.platform');
+                this.syncPathDebugButton();
             }
 
             restartEngine() { this.bootEngine(); }
             regeneratePlatforms() { this.generatePlatforms(); }
-            togglePathDebug() { if (this.game) this.game.debug.enabled = !this.game.debug.enabled; }
+            togglePathDebugMode() {
+                if (!this.game) return;
+                if (typeof this.game.cycleDebugMode === 'function') {
+                    this.game.cycleDebugMode();
+                } else {
+                    const next = this.game.debug?.enabled ? 'off' : 'used';
+                    if (typeof this.game.setDebugMode === 'function') {
+                        this.game.setDebugMode(next);
+                    } else {
+                        this.game.debug.enabled = !this.game.debug.enabled;
+                    }
+                }
+                this.syncPathDebugButton();
+            }
 
             onMouseMove(event) {
                 this.cursorTarget.style.left = `${event.clientX}px`;
@@ -672,10 +974,9 @@
             }
 
             onResize() {
-                this.generatePlatforms();
+                this.generatePlatforms(false);
                 if (this.game) {
                     this.game.resize();
-                    this.game.scanPlatforms('.platform');
                 }
             }
         }
@@ -684,9 +985,12 @@
 
         function restartEngine() { website?.restartEngine(); }
         function regeneratePlatforms() { website?.regeneratePlatforms(); }
-        function togglePathDebug() { website?.togglePathDebug(); }
+        function togglePathDebugMode() { website?.togglePathDebugMode(); }
         function resetMetrics() { website?.resetMetrics(); }
         function applyPreset(name) { website?.applyPreset(name); }
+        function toggleSidebar() { website?.toggleSidebar(); }
+        function runPathStressTest() { website?.runPathStressTest(); }
+        function toggleStressReport() { website?.toggleStressReport(); }
 
         window.onload = () => {
             website = new BlobEngineWebsite();
