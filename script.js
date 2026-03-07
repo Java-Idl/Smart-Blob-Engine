@@ -238,7 +238,11 @@ class SmartBlob {
             idleTime: 0,
             lookOffset: 0,
             blinkWindowStart: -1,
-            nextBlinkAt: performance.now() + 1200 + Math.random() * 2800
+            nextBlinkAt: performance.now() + 1200 + Math.random() * 2800,
+            stationaryTime: 0,
+            stationaryStrength: 0,
+            lastBlobX: this.blob.x,
+            lastBlobY: this.blob.y
         };
 
         this.defaultMetrics = {
@@ -1154,6 +1158,21 @@ class SmartBlob {
         const desiredLook = this.clamp((this.mouse.x - centerX) / 110, -1, 1);
         this.animation.lookOffset += (desiredLook - this.animation.lookOffset) * 0.2;
 
+        const movementDelta = Math.hypot(
+            this.blob.x - this.animation.lastBlobX,
+            this.blob.y - this.animation.lastBlobY
+        );
+        this.animation.lastBlobX = this.blob.x;
+        this.animation.lastBlobY = this.blob.y;
+
+        const stationaryNow = !this.blob.isJumping && movementDelta < 0.1;
+        if (stationaryNow) {
+            this.animation.stationaryTime = this.clamp(this.animation.stationaryTime + dt, 0, 5000);
+        } else {
+            this.animation.stationaryTime = this.clamp(this.animation.stationaryTime - dt * 2.1, 0, 5000);
+        }
+        this.animation.stationaryStrength = this.clamp((this.animation.stationaryTime - 260) / 960, 0, 1);
+
         if (time >= this.animation.nextBlinkAt && this.animation.blinkWindowStart < 0) {
             this.animation.blinkWindowStart = time;
             this.animation.nextBlinkAt = time + 1200 + Math.random() * 3200;
@@ -1242,6 +1261,7 @@ class SmartBlob {
         const idleBreath = this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.0052) * 0.04;
         const idleSway = this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.003) * 0.02;
         const bobY = this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.0044) * 1.8;
+        const stationaryStrength = this.animation.stationaryStrength;
         const renderScaleX = blob.scaleX * (1 - idleBreath * 0.62 + idleSway);
         const renderScaleY = blob.scaleY * (1 + idleBreath);
         const renderRotation = blob.rotation + (this.blob.isJumping ? 0 : Math.sin(this.animation.idleTime * 0.0022) * 0.03);
@@ -1261,6 +1281,22 @@ class SmartBlob {
         );
         ctx.fill();
         ctx.restore();
+
+        if (stationaryStrength > 0) {
+            const auraPulse = (Math.sin(this.animation.idleTime * 0.0064) + 1) * 0.5;
+            const auraScale = 1 + auraPulse * (0.18 + stationaryStrength * 0.2);
+            const auraW = size * auraScale;
+            const auraH = size * (0.7 + auraPulse * 0.12);
+            const auraX = cx - auraW / 2;
+            const auraY = blob.y + size / 2 - auraH / 2 + bobY * 0.25;
+
+            ctx.save();
+            ctx.globalAlpha = 0.12 + stationaryStrength * 0.22;
+            ctx.strokeStyle = config.colors.blob;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(auraX, auraY, auraW, auraH);
+            ctx.restore();
+        }
 
         ctx.save();
         ctx.translate(cx, cy + bobY);

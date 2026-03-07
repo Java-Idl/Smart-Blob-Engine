@@ -304,6 +304,18 @@
         .metric-val.status-warn { color: #ffd26e; }
         .metric-val.status-bad { color: #ff6f7a; }
 
+        .stress-report {
+            margin-top: 8px;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.24);
+            color: var(--text-dim);
+            font-size: 11px;
+            line-height: 1.35;
+            min-height: 34px;
+        }
+
         #cursor-target {
             position: fixed;
             width: 18px;
@@ -345,8 +357,10 @@
                     <button class="alt" onclick="regeneratePlatforms()">Regenerate Platforms</button>
                     <button id="path-debug-toggle" class="warn" onclick="togglePathDebugMode()">Path Lines: Off</button>
                     <button id="path-stress-toggle" class="alt" onclick="runPathStressTest()">Path Stress: 10s</button>
+                    <button id="stress-report-toggle" onclick="toggleStressReport()">Stress Report: On</button>
                     <button onclick="resetMetrics()">Reset Metrics</button>
                 </div>
+                <div id="stress-report-output" class="stress-report">Run Path Stress to generate a mini report.</div>
             </div>
 
             <div class="section">
@@ -418,6 +432,8 @@
                 this.sidebarToggleButton = document.getElementById('sidebar-toggle');
                 this.pathDebugToggleButton = document.getElementById('path-debug-toggle');
                 this.pathStressToggleButton = document.getElementById('path-stress-toggle');
+                this.stressReportToggleButton = document.getElementById('stress-report-toggle');
+                this.stressReportOutput = document.getElementById('stress-report-output');
 
                 this.climbAggressionInput = document.getElementById('climb-aggr');
                 this.dropAggressionInput = document.getElementById('drop-aggr');
@@ -442,6 +458,8 @@
                 this.pathStressTimeoutId = null;
                 this.pathStressButtonRafId = null;
                 this.pathStressEndTime = 0;
+                this.stressReportEnabled = true;
+                this.currentStressStats = null;
 
                 this.onResize = this.onResize.bind(this);
                 this.onMouseMove = this.onMouseMove.bind(this);
@@ -646,7 +664,49 @@
                 this.pathDebugToggleButton.textContent = `Path Lines: ${mode}`;
             }
 
-            stopPathStressTest() {
+            toggleStressReport() {
+                this.stressReportEnabled = !this.stressReportEnabled;
+                if (this.stressReportToggleButton) {
+                    this.stressReportToggleButton.textContent = this.stressReportEnabled ? 'Stress Report: On' : 'Stress Report: Off';
+                    this.stressReportToggleButton.classList.toggle('warn', !this.stressReportEnabled);
+                }
+
+                if (this.stressReportOutput) {
+                    if (this.stressReportEnabled) {
+                        if (!this.stressReportOutput.textContent.trim()) {
+                            this.stressReportOutput.textContent = 'Run Path Stress to generate a mini report.';
+                        }
+                        this.stressReportOutput.style.display = 'block';
+                    } else {
+                        this.stressReportOutput.style.display = 'none';
+                    }
+                }
+            }
+
+            renderStressReport(stats, runMs) {
+                if (!this.stressReportEnabled || !this.stressReportOutput || !stats) return;
+                this.stressReportOutput.style.display = 'block';
+                this.stressReportOutput.textContent = `Stress Report (${(runMs / 1000).toFixed(1)}s) · max solveMs ${stats.maxSolveMs.toFixed(2)} · fallback spikes ${stats.fallbackSpikes} · blocked count ${stats.blockedCount}`;
+            }
+
+            sampleStressMetrics() {
+                if (!this.currentStressStats) return;
+                const metrics = this.getMetricsSnapshot();
+                const solveMs = Number(metrics.solveMs || 0);
+                const fallbackCount = Number(metrics.fallbackCount || 0);
+                const mode = metrics.mode || 'idle';
+
+                this.currentStressStats.maxSolveMs = Math.max(this.currentStressStats.maxSolveMs, solveMs);
+                if (mode === 'blocked') {
+                    this.currentStressStats.blockedCount += 1;
+                }
+                if (fallbackCount > this.currentStressStats.lastFallbackCount) {
+                    this.currentStressStats.fallbackSpikes += (fallbackCount - this.currentStressStats.lastFallbackCount);
+                }
+                this.currentStressStats.lastFallbackCount = fallbackCount;
+            }
+
+            stopPathStressTest(completedRun = false, runMs = 0) {
                 if (this.pathStressIntervalId) {
                     clearInterval(this.pathStressIntervalId);
                     this.pathStressIntervalId = null;
@@ -666,6 +726,11 @@
                     this.pathStressToggleButton.classList.remove('warn');
                     this.pathStressToggleButton.classList.add('alt');
                 }
+
+                if (completedRun) {
+                    this.renderStressReport(this.currentStressStats, runMs);
+                }
+                this.currentStressStats = null;
             }
 
             runPathStressTest() {
@@ -678,6 +743,13 @@
 
                 const durationMs = 10000;
                 this.pathStressEndTime = performance.now() + durationMs;
+                const metricsAtStart = this.getMetricsSnapshot();
+                this.currentStressStats = {
+                    maxSolveMs: 0,
+                    fallbackSpikes: 0,
+                    blockedCount: 0,
+                    lastFallbackCount: Number(metricsAtStart.fallbackCount || 0)
+                };
 
                 const updateStressButton = () => {
                     if (!this.pathStressToggleButton || !this.pathStressEndTime) return;
@@ -714,6 +786,8 @@
 
                     this.cursorTarget.style.left = `${targetX}px`;
                     this.cursorTarget.style.top = `${targetY}px`;
+
+                    this.sampleStressMetrics();
                 };
 
                 if (this.pathStressToggleButton) {
@@ -725,7 +799,8 @@
                 pushRandomStressTarget();
                 this.pathStressIntervalId = setInterval(pushRandomStressTarget, 90);
                 this.pathStressTimeoutId = setTimeout(() => {
-                    this.stopPathStressTest();
+                    this.sampleStressMetrics();
+                    this.stopPathStressTest(true, durationMs);
                 }, durationMs);
             }
 
@@ -844,6 +919,7 @@
         function applyPreset(name) { website?.applyPreset(name); }
         function toggleSidebar() { website?.toggleSidebar(); }
         function runPathStressTest() { website?.runPathStressTest(); }
+        function toggleStressReport() { website?.toggleStressReport(); }
 
         window.onload = () => {
             website = new BlobEngineWebsite();
