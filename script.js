@@ -893,11 +893,6 @@ class SmartBlob {
         const path = this.reconstructPath(shortestPaths.cameFrom, best.nodeId);
         if (!path || path.length < 2) return null;
 
-        const minImprovement = 0.05;
-        if (best.targetDistance >= currentDistanceToTarget - minImprovement) {
-            return null;
-        }
-
         return {
             nodeId: best.nodeId,
             path,
@@ -917,6 +912,9 @@ class SmartBlob {
 
         for (const node of graph.nodes) {
             if (!this.canTraverse(startNode, node, limits)) continue;
+
+            const movementDistance = Math.hypot(node.x - startNode.x, node.y - startNode.y);
+            if (movementDistance <= 1) continue;
 
             const dy = node.y - startNode.y;
             let directionPenalty = 0;
@@ -981,10 +979,64 @@ class SmartBlob {
         const bestReachable = this.pickBestReachableNode(graph, startNode, shortestPaths, limits);
 
         if (bestReachable) {
-            const nextNode = graph.nodes[bestReachable.path[1]];
+            let normalizedPath = Array.isArray(bestReachable.path) ? [...bestReachable.path] : [];
+            if (normalizedPath.length >= 2 && normalizedPath[0] !== -1 && normalizedPath[normalizedPath.length - 1] === -1) {
+                normalizedPath.reverse();
+            }
+
+            const startIndex = normalizedPath.indexOf(-1);
+            let selectedNextIndex = -1;
+            let nextNodeId = null;
+
+            if (startIndex >= 0 && startIndex < normalizedPath.length - 1) {
+                for (let index = startIndex + 1; index < normalizedPath.length; index++) {
+                    const candidateId = normalizedPath[index];
+                    const candidateNode = graph.nodes[candidateId];
+                    if (!candidateNode) continue;
+
+                    const candidateDistance = Math.hypot(candidateNode.x - startNode.x, candidateNode.y - startNode.y);
+                    if (candidateDistance <= 1) continue;
+
+                    nextNodeId = candidateId;
+                    selectedNextIndex = index;
+                    break;
+                }
+            }
+
+            const nextNode = nextNodeId === null ? null : graph.nodes[nextNodeId];
+
+            if (!nextNode && Number.isFinite(bestReachable.landingX) && Number.isFinite(bestReachable.landingY)) {
+                const projectedNode = { x: bestReachable.landingX, y: bestReachable.landingY };
+                const projectedDistance = Math.hypot(projectedNode.x - startNode.x, projectedNode.y - startNode.y);
+
+                if (projectedDistance > 1 && this.canTraverse(startNode, projectedNode, limits)) {
+                    if (this.debug.enabled) {
+                        const pathNodes = normalizedPath.map((id) => (id === -1 ? startNode : graph.nodes[id])).filter(Boolean);
+                        pathNodes.push({ x: bestReachable.landingX, y: bestReachable.landingY });
+                        this.debug.activePath = pathNodes;
+                    }
+
+                    this.metrics.update({
+                        selectedPathLength: normalizedPath.length,
+                        targetError: bestReachable.targetDistance,
+                        mode: 'astar',
+                        solveMs: performance.now() - solveStart
+                    });
+
+                    return {
+                        x: bestReachable.landingX,
+                        y: bestReachable.landingY + this.config.blobSize,
+                        path: normalizedPath,
+                        targetError: bestReachable.targetDistance,
+                        mode: 'astar',
+                        improvement: bestReachable.improvement
+                    };
+                }
+            }
+
             if (nextNode) {
                 if (this.debug.enabled) {
-                    const pathNodes = bestReachable.path.map((id) => (id === -1 ? startNode : graph.nodes[id])).filter(Boolean);
+                    const pathNodes = normalizedPath.map((id) => (id === -1 ? startNode : graph.nodes[id])).filter(Boolean);
                     if (bestReachable.isProjected) {
                         pathNodes.push({ x: bestReachable.landingX, y: bestReachable.landingY });
                     }
@@ -992,20 +1044,23 @@ class SmartBlob {
                 }
 
                 this.metrics.update({
-                    selectedPathLength: bestReachable.path.length,
+                    selectedPathLength: normalizedPath.length,
                     targetError: bestReachable.targetDistance,
                     mode: 'astar',
                     solveMs: performance.now() - solveStart
                 });
 
-                const useProjectedLanding = bestReachable.path.length <= 2 && Number.isFinite(bestReachable.landingX) && Number.isFinite(bestReachable.landingY);
+                const remainingPathLength = selectedNextIndex >= 0
+                    ? (normalizedPath.length - selectedNextIndex + 1)
+                    : normalizedPath.length;
+                const useProjectedLanding = remainingPathLength <= 2 && Number.isFinite(bestReachable.landingX) && Number.isFinite(bestReachable.landingY);
                 const finalX = useProjectedLanding ? bestReachable.landingX : nextNode.x;
                 const finalY = useProjectedLanding ? bestReachable.landingY + this.config.blobSize : nextNode.y + this.config.blobSize;
 
                 return {
                     x: finalX,
                     y: finalY,
-                    path: bestReachable.path,
+                    path: normalizedPath,
                     targetError: bestReachable.targetDistance,
                     mode: 'astar',
                     improvement: bestReachable.improvement
@@ -1071,7 +1126,13 @@ class SmartBlob {
         const plannedDistance = Math.hypot(target.x - this.blob.x, plannedTopY - this.blob.y);
         if (!force && plannedDistance < this.config.minMoveDistance) {
             const isFallbackHop = target.mode === 'fallback';
-            if (isFallbackHop && plannedDistance >= this.config.minMoveDistance * 0.5) {
+            const isAStarSetupHop = target.mode === 'astar' && Array.isArray(target.path) && target.path.length >= 3;
+            const setupHopThreshold = Math.max(0.75, this.config.minMoveDistance * 0.2);
+
+            if (
+                (isFallbackHop && plannedDistance >= this.config.minMoveDistance * 0.5) ||
+                (isAStarSetupHop && plannedDistance >= setupHopThreshold)
+            ) {
                 // allow short corrective fallback hops
             } else {
             const blobCenterX = this.blob.x + this.config.blobSize / 2;
