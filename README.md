@@ -3,6 +3,8 @@
 Smart Blob Engine is a browser-only movement engine.
 It draws a blob on a canvas, tracks the mouse, builds a platform graph from DOM elements, and moves the blob with A* path search.
 
+_Inspiration_ [\^o^/](https://neon-blob-jump.kudos-kebab-kept.workers.dev/)
+
 All engine code is in `script.js`.
 
 ## Quick start
