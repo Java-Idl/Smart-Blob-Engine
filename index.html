@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Blob Jumper</title>
+    <style>
+        :root {
+            --bg-top: #240038;
+            --bg-bot: #0d0014;
+            --sun-color: #ffaa00;
+            --accent-pink: #ff0077;
+            --accent-cyan: #00f2ff;
+            --accent-lime: #bcff03;
+            --panel-bg: rgba(14, 12, 24, 0.9);
+            --panel-border: rgba(255, 255, 255, 0.22);
+            --text-main: #e8efff;
+            --text-dim: #95a4c7;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: linear-gradient(to bottom, var(--bg-top), var(--bg-bot));
+            font-family: 'Courier New', Courier, monospace;
+            cursor: crosshair;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            image-rendering: pixelated;
+        }
+
+        .pixel-sun {
+            position: absolute;
+            bottom: 28%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(48vw, 430px);
+            aspect-ratio: 1/1;
+            background: linear-gradient(to bottom, var(--sun-color) 0%, #ff0055 100%);
+            border-radius: 50%;
+            z-index: 0;
+            box-shadow: 0 0 60px rgba(255, 100, 0, 0.45);
+            pointer-events: none;
+        }
+
+        .pixel-sun::after {
+            content: '';
+            position: absolute;
+            top: 46%;
+            left: 0;
+            width: 100%;
+            height: 54%;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0%,
+                transparent 10%,
+                var(--bg-bot) 10%,
+                var(--bg-bot) 15%
+            );
+        }
+
+        .mountain {
+            position: absolute;
+            bottom: 0;
+            width: 0;
+            height: 0;
+            border-left: 180px solid transparent;
+            border-right: 180px solid transparent;
+            border-bottom: 280px solid #1a0029;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .m-1 { left: 6%; border-bottom-color: #2a0039; z-index: 2; transform: scale(1.45); }
+        .m-2 { left: 62%; border-bottom-color: #1a0029; transform: scale(1.95); }
+        .m-3 { left: -12%; transform: scale(1.15); }
+
+        .grid-floor {
+            position: absolute;
+            bottom: -2%;
+            left: 0;
+            width: 100%;
+            height: 38%;
+            background:
+                linear-gradient(transparent 95%, rgba(255, 0, 119, 0.55) 95%),
+                linear-gradient(90deg, transparent 95%, rgba(255, 0, 119, 0.55) 95%);
+            background-size: 42px 42px;
+            transform-origin: bottom;
+            transform: perspective(520px) rotateX(62deg);
+            z-index: 2;
+            opacity: 0.34;
+            pointer-events: none;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(
+                to bottom,
+                rgba(18, 16, 16, 0) 50%,
+                rgba(0, 0, 0, 0.22) 50%
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .platform {
+            position: absolute;
+            box-sizing: border-box;
+            z-index: 10;
+            border: 4px solid black;
+            box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.42);
+            transition: transform 180ms ease, filter 180ms ease;
+        }
+
+        .platform:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.06);
+        }
+
+        .variant-1 { background-color: var(--accent-pink); border-top: 4px solid rgba(255,255,255,0.42); }
+        .variant-2 { background-color: var(--accent-cyan); border-top: 4px solid rgba(255,255,255,0.42); }
+        .variant-3 { background-color: var(--accent-lime); border-top: 4px solid rgba(255,255,255,0.42); }
+
+        .ui-layer {
+            position: fixed;
+            top: 18px;
+            left: 18px;
+            z-index: 95;
+            color: var(--accent-cyan);
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+        }
+
+        .ui-layer h1 {
+            margin: 0;
+            font-size: clamp(26px, 4vw, 34px);
+            letter-spacing: 2px;
+            line-height: 1;
+        }
+
+        .ui-layer p {
+            margin: 5px 0 0;
+            font-size: 13px;
+            color: #ffffff;
+        }
+
+        .studio-panel {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            z-index: 95;
+            width: 280px;
+            max-height: calc(100vh - 36px);
+            overflow: auto;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(2px);
+            color: var(--text-main);
+        }
+
+        .studio-head {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .studio-head .title {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            color: var(--accent-cyan);
+        }
+
+        .studio-head .subtitle {
+            margin-top: 3px;
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .section {
+            padding: 10px 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .section .label {
+            margin-bottom: 8px;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .btn-grid {
+            display: grid;
+            gap: 6px;
+        }
+
+        .preset-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+        }
+
+        .btn-grid button {
+            width: 100%;
+            border: 0;
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            color: #08040f;
+            background: #9ff9ff;
+        }
+
+        .btn-grid button:hover { filter: brightness(1.08); }
+        .btn-grid button.alt { background: #ff8dc8; }
+        .btn-grid button.warn { background: #ffd08f; }
+
+        .preset-grid button {
+            width: 100%;
+            border: 0;
+            padding: 7px 6px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-family: inherit;
+            font-size: 11px;
+            cursor: pointer;
+            color: #08040f;
+            background: #bafaff;
+        }
+
+        .preset-grid button:hover { filter: brightness(1.08); }
+
+        .tune-row {
+            margin: 8px 0;
+        }
+
+        .tune-row .row-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 4px;
+            font-size: 11px;
+        }
+
+        .tune-row .name { color: var(--text-main); }
+        .tune-row .val { color: #fff; font-weight: 700; }
+        .tune-row input[type="range"] { width: 100%; accent-color: #00f2ff; }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin: 4px 0;
+            font-size: 12px;
+        }
+
+        .metric-key { color: var(--text-dim); }
+        .metric-val {
+            color: #fff;
+            font-weight: 700;
+            transition: color 120ms ease;
+        }
+
+        .metric-val.status-good { color: #7bffb8; }
+        .metric-val.status-warn { color: #ffd26e; }
+        .metric-val.status-bad { color: #ff6f7a; }
+
+        #cursor-target {
+            position: fixed;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 70;
+            mix-blend-mode: difference;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div class="pixel-sun"></div>
+        <div class="mountain m-1"></div>
+        <div class="mountain m-2"></div>
+        <div class="mountain m-3"></div>
+        <div class="grid-floor"></div>
+
+        <div class="ui-layer">
+            <h1>NEON JUMP</h1>
+            <p>Guide the blob • adaptive A* • flat-motion tuning</p>
+        </div>
+
+        <aside class="studio-panel">
+            <div class="studio-head">
+                <div class="title">Blob Studio</div>
+                <div class="subtitle">Controls + Pathfinding HUD</div>
+            </div>
+
+            <div class="section">
+                <div class="label">Actions</div>
+                <div class="btn-grid">
+                    <button onclick="restartEngine()">Restart Engine</button>
+                    <button class="alt" onclick="regeneratePlatforms()">Regenerate Platforms</button>
+                    <button class="warn" onclick="togglePathDebug()">Toggle Path Lines</button>
+                    <button onclick="resetMetrics()">Reset Metrics</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="label">Live Tuning</div>
+
+                <div class="preset-grid" style="margin-bottom: 8px;">
+                    <button onclick="applyPreset('arcade')">Arcade</button>
+                    <button onclick="applyPreset('flat')">Flat Precision</button>
+                    <button onclick="applyPreset('classic')">Classic Blob</button>
+                </div>
+
+                <div class="tune-row">
+                    <div class="row-head"><span class="name">climbAggression</span><span class="val" id="climb-aggr-val">1.00</span></div>
+                    <input id="climb-aggr" type="range" min="0.40" max="2.50" step="0.05" value="1.00" />
+                </div>
+
+                <div class="tune-row">
+                    <div class="row-head"><span class="name">dropAggression</span><span class="val" id="drop-aggr-val">1.00</span></div>
+                    <input id="drop-aggr" type="range" min="0.40" max="2.50" step="0.05" value="1.00" />
+                </div>
+
+                <div class="tune-row">
+                    <div class="row-head"><span class="name">minMoveDistance</span><span class="val" id="min-move-dist-val">6.00</span></div>
+                    <input id="min-move-dist" type="range" min="1.00" max="20.00" step="0.50" value="6.00" />
+                </div>
+
+                <div class="tune-row">
+                    <div class="row-head"><span class="name">flatMoveBias</span><span class="val" id="flat-move-bias-val">1.00</span></div>
+                    <input id="flat-move-bias" type="range" min="0.40" max="3.00" step="0.10" value="1.00" />
+                </div>
+
+                <div class="tune-row">
+                    <div class="row-head"><span class="name">flatArcMax</span><span class="val" id="flat-arc-max-val">64.00</span></div>
+                    <input id="flat-arc-max" type="range" min="4.00" max="80.00" step="1.00" value="64.00" />
+                </div>
+
+                <div class="tune-row">
+                    <div class="row-head"><span class="name">targetPredictionWeight</span><span class="val" id="target-prediction-weight-val">0.00</span></div>
+                    <input id="target-prediction-weight" type="range" min="0.00" max="1.00" step="0.05" value="0.00" />
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="label">Pathfinding HUD</div>
+                <div class="metric-row"><span class="metric-key">urgency</span><span class="metric-val" id="hud-urgency">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">maxJumpX</span><span class="metric-val" id="hud-max-jump-x">0</span></div>
+                <div class="metric-row"><span class="metric-key">pathLength</span><span class="metric-val" id="hud-path-length">0</span></div>
+                <div class="metric-row"><span class="metric-key">bestTargetDist</span><span class="metric-val" id="hud-best-target-distance">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">expanded</span><span class="metric-val" id="hud-expanded">0</span></div>
+                <div class="metric-row"><span class="metric-key">solveMs</span><span class="metric-val" id="hud-solve-ms">0.00</span></div>
+                <div class="metric-row"><span class="metric-key">fallbacks</span><span class="metric-val" id="hud-fallbacks">0</span></div>
+                <div class="metric-row"><span class="metric-key">mode</span><span class="metric-val" id="hud-mode">idle</span></div>
+            </div>
+        </aside>
+
+        <div id="cursor-target"></div>
+        <div class="scanlines"></div>
+    </div>
+
+    <script src="./script.js"></script>
+    <script>
+        class BlobEngineWebsite {
+            constructor() {
+                this.gameContainer = document.getElementById('game-container');
+                this.cursorTarget = document.getElementById('cursor-target');
+
+                this.climbAggressionInput = document.getElementById('climb-aggr');
+                this.dropAggressionInput = document.getElementById('drop-aggr');
+                this.minMoveDistanceInput = document.getElementById('min-move-dist');
+                this.flatMoveBiasInput = document.getElementById('flat-move-bias');
+                this.flatArcMaxInput = document.getElementById('flat-arc-max');
+                this.targetPredictionWeightInput = document.getElementById('target-prediction-weight');
+
+                this.climbAggressionValue = document.getElementById('climb-aggr-val');
+                this.dropAggressionValue = document.getElementById('drop-aggr-val');
+                this.minMoveDistanceValue = document.getElementById('min-move-dist-val');
+                this.flatMoveBiasValue = document.getElementById('flat-move-bias-val');
+                this.flatArcMaxValue = document.getElementById('flat-arc-max-val');
+                this.targetPredictionWeightValue = document.getElementById('target-prediction-weight-val');
+
+                this.game = null;
+                this.hudRafId = null;
+                this.lastFallbackCount = 0;
+                this.fallbackEvents = [];
+
+                this.onResize = this.onResize.bind(this);
+                this.onMouseMove = this.onMouseMove.bind(this);
+                this.updateHud = this.updateHud.bind(this);
+            }
+
+            init() {
+                this.bindEvents();
+                this.updateTuneLabels();
+                this.generatePlatforms();
+                this.bootEngine();
+                this.hudRafId = requestAnimationFrame(this.updateHud);
+            }
+
+            bindEvents() {
+                window.addEventListener('resize', this.onResize);
+                window.addEventListener('mousemove', this.onMouseMove);
+
+                this.climbAggressionInput.addEventListener('input', () => { this.updateTuneLabels(); this.applyTuneToGame(); });
+                this.dropAggressionInput.addEventListener('input', () => { this.updateTuneLabels(); this.applyTuneToGame(); });
+                this.minMoveDistanceInput.addEventListener('input', () => { this.updateTuneLabels(); this.applyTuneToGame(); });
+                this.flatMoveBiasInput.addEventListener('input', () => { this.updateTuneLabels(); this.applyTuneToGame(); });
+                this.flatArcMaxInput.addEventListener('input', () => { this.updateTuneLabels(); this.applyTuneToGame(); });
+                this.targetPredictionWeightInput.addEventListener('input', () => { this.updateTuneLabels(); this.applyTuneToGame(); });
+            }
+
+            getTuneValues() {
+                return {
+                    climbAggression: Number(this.climbAggressionInput.value || 1),
+                    dropAggression: Number(this.dropAggressionInput.value || 1),
+                    minMoveDistance: Number(this.minMoveDistanceInput.value || 6),
+                    flatMoveBias: Number(this.flatMoveBiasInput.value || 1),
+                    flatArcMax: Number(this.flatArcMaxInput.value || 64),
+                    targetPredictionWeight: Number(this.targetPredictionWeightInput.value || 0)
+                };
+            }
+
+            updateTuneLabels() {
+                const tune = this.getTuneValues();
+                this.climbAggressionValue.textContent = tune.climbAggression.toFixed(2);
+                this.dropAggressionValue.textContent = tune.dropAggression.toFixed(2);
+                this.minMoveDistanceValue.textContent = tune.minMoveDistance.toFixed(2);
+                this.flatMoveBiasValue.textContent = tune.flatMoveBias.toFixed(2);
+                this.flatArcMaxValue.textContent = tune.flatArcMax.toFixed(2);
+                this.targetPredictionWeightValue.textContent = tune.targetPredictionWeight.toFixed(2);
+            }
+
+            applyTuneToGame() {
+                if (!this.game) return;
+                const tune = this.getTuneValues();
+                this.game.config.climbAggression = tune.climbAggression;
+                this.game.config.dropAggression = tune.dropAggression;
+                this.game.config.minMoveDistance = tune.minMoveDistance;
+                this.game.config.flatMoveBias = tune.flatMoveBias;
+                this.game.config.flatArcMax = tune.flatArcMax;
+                this.game.config.targetPredictionWeight = tune.targetPredictionWeight;
+            }
+
+            applyPreset(name) {
+                const presets = {
+                    arcade: {
+                        climbAggression: 1.35,
+                        dropAggression: 1.25,
+                        minMoveDistance: 4.5,
+                        flatMoveBias: 1.2,
+                        flatArcMax: 52,
+                        targetPredictionWeight: 0.45
+                    },
+                    flat: {
+                        climbAggression: 1.1,
+                        dropAggression: 1.0,
+                        minMoveDistance: 2.0,
+                        flatMoveBias: 2.4,
+                        flatArcMax: 10,
+                        targetPredictionWeight: 0.15
+                    },
+                    classic: {
+                        climbAggression: 1.0,
+                        dropAggression: 1.0,
+                        minMoveDistance: 6.0,
+                        flatMoveBias: 1.0,
+                        flatArcMax: 64,
+                        targetPredictionWeight: 0.0
+                    }
+                };
+
+                const preset = presets[name];
+                if (!preset) return;
+
+                this.climbAggressionInput.value = preset.climbAggression.toFixed(2);
+                this.dropAggressionInput.value = preset.dropAggression.toFixed(2);
+                this.minMoveDistanceInput.value = preset.minMoveDistance.toFixed(2);
+                this.flatMoveBiasInput.value = preset.flatMoveBias.toFixed(2);
+                this.flatArcMaxInput.value = Math.round(preset.flatArcMax).toString();
+                this.targetPredictionWeightInput.value = preset.targetPredictionWeight.toFixed(2);
+
+                this.updateTuneLabels();
+                this.applyTuneToGame();
+            }
+
+            getMetricsSnapshot() {
+                const metricsStore = this.game?.debug?.metrics;
+                if (!metricsStore) return {};
+                if (typeof metricsStore.snapshot === 'function') {
+                    return metricsStore.snapshot();
+                }
+                return { ...metricsStore };
+            }
+
+            resetMetrics() {
+                if (!this.game) return;
+                if (typeof this.game.resetMetrics === 'function') {
+                    this.game.resetMetrics();
+                } else if (this.game.metrics) {
+                    this.game.metrics.reset(this.game.defaultMetrics || {});
+                }
+                this.lastFallbackCount = 0;
+                this.fallbackEvents.length = 0;
+            }
+
+            setStatusClass(elementId, status) {
+                const element = document.getElementById(elementId);
+                if (!element) return;
+                element.classList.remove('status-good', 'status-warn', 'status-bad');
+                if (status) element.classList.add(status);
+            }
+
+            updateHud() {
+                if (!this.game) {
+                    this.hudRafId = requestAnimationFrame(this.updateHud);
+                    return;
+                }
+
+                const metrics = this.getMetricsSnapshot();
+                const urgency = Number(metrics.urgency || 0);
+                const maxJumpX = Number(metrics.maxJumpX || 0);
+                const selectedPathLength = Number(metrics.selectedPathLength || 0);
+                const bestTargetDistance = Number(metrics.bestTargetDistance || 0);
+                const expandedNodes = Number(metrics.expandedNodes || 0);
+                const solveMs = Number(metrics.solveMs || 0);
+                const fallbackCount = Number(metrics.fallbackCount || 0);
+                const mode = metrics.mode || 'idle';
+                const now = performance.now();
+
+                if (fallbackCount > this.lastFallbackCount) {
+                    const adds = fallbackCount - this.lastFallbackCount;
+                    for (let index = 0; index < adds; index++) {
+                        this.fallbackEvents.push(now);
+                    }
+                }
+                this.lastFallbackCount = fallbackCount;
+
+                while (this.fallbackEvents.length > 0 && now - this.fallbackEvents[0] > 5000) {
+                    this.fallbackEvents.shift();
+                }
+                const fallbackSpikeCount = this.fallbackEvents.length;
+
+                document.getElementById('hud-urgency').textContent = urgency.toFixed(2);
+                document.getElementById('hud-max-jump-x').textContent = Math.round(maxJumpX).toString();
+                document.getElementById('hud-path-length').textContent = selectedPathLength.toString();
+                document.getElementById('hud-best-target-distance').textContent = bestTargetDistance.toFixed(2);
+                document.getElementById('hud-expanded').textContent = expandedNodes.toString();
+                document.getElementById('hud-solve-ms').textContent = solveMs.toFixed(2);
+                document.getElementById('hud-fallbacks').textContent = fallbackCount.toString();
+                document.getElementById('hud-mode').textContent = mode;
+
+                const solveStatus = solveMs > 4 ? 'status-bad' : solveMs > 2.5 ? 'status-warn' : 'status-good';
+                this.setStatusClass('hud-solve-ms', solveStatus);
+
+                const fallbackStatus = fallbackSpikeCount >= 3 ? 'status-bad' : fallbackSpikeCount >= 1 ? 'status-warn' : 'status-good';
+                this.setStatusClass('hud-fallbacks', fallbackStatus);
+
+                const modeStatus = mode === 'blocked' ? 'status-bad' : mode === 'fallback' ? 'status-warn' : 'status-good';
+                this.setStatusClass('hud-mode', modeStatus);
+
+                const targetDistStatus = bestTargetDistance > 120 ? 'status-bad' : bestTargetDistance > 45 ? 'status-warn' : 'status-good';
+                this.setStatusClass('hud-best-target-distance', targetDistStatus);
+
+                this.hudRafId = requestAnimationFrame(this.updateHud);
+            }
+
+            clearPlatforms() {
+                const existingPlatforms = this.gameContainer.querySelectorAll('.platform');
+                existingPlatforms.forEach((node) => node.remove());
+            }
+
+            addPlatform(x, y, width, height, variantClass, isGround = false) {
+                const platform = document.createElement('div');
+                platform.className = `platform ${variantClass}`;
+                platform.style.left = `${Math.round(x)}px`;
+                platform.style.top = `${Math.round(y)}px`;
+                platform.style.width = `${Math.round(width)}px`;
+                platform.style.height = `${Math.round(height)}px`;
+                if (isGround) platform.style.zIndex = '5';
+                this.gameContainer.appendChild(platform);
+            }
+
+            generatePlatforms() {
+                this.clearPlatforms();
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+
+                this.addPlatform(0, height - 26, width, 30, 'variant-1', true);
+
+                let currentY = height - 145;
+                while (currentY > 68) {
+                    const count = Math.random() > 0.58 ? 2 : 1;
+                    for (let index = 0; index < count; index++) {
+                        const platformWidth = 120 + Math.random() * 190;
+                        const platformHeight = 24;
+                        let minX = 10;
+                        if (currentY < 160) minX = 300;
+                        const maxX = Math.max(minX + 10, width - platformWidth - 10);
+                        const x = minX + Math.random() * (maxX - minX);
+                        const jitterY = (Math.random() * 75) - 36;
+                        const y = currentY + jitterY;
+                        const variant = `variant-${Math.floor(Math.random() * 3) + 1}`;
+                        this.addPlatform(x, y, platformWidth, platformHeight, variant);
+                    }
+                    currentY -= (110 + Math.random() * 90);
+                }
+
+                if (this.game) {
+                    this.game.scanPlatforms('.platform');
+                }
+            }
+
+            bootEngine() {
+                if (this.game) {
+                    this.game.stop();
+                }
+
+                const tune = this.getTuneValues();
+
+                this.game = new SmartBlob({
+                    container: this.gameContainer,
+                    blobColor: '#ffe600',
+                    debugPath: false,
+                    jumpSpeed: 500,
+                    maxJumpX: 320,
+                    maxJumpUp: 260,
+                    maxDropDown: 520,
+                    climbAggression: tune.climbAggression,
+                    dropAggression: tune.dropAggression,
+                    minMoveDistance: tune.minMoveDistance,
+                    flatMoveBias: tune.flatMoveBias,
+                    flatArcMax: tune.flatArcMax,
+                    targetPredictionWeight: tune.targetPredictionWeight
+                });
+
+                this.lastFallbackCount = 0;
+                this.fallbackEvents.length = 0;
+                this.game.scanPlatforms('.platform');
+            }
+
+            restartEngine() { this.bootEngine(); }
+            regeneratePlatforms() { this.generatePlatforms(); }
+            togglePathDebug() { if (this.game) this.game.debug.enabled = !this.game.debug.enabled; }
+
+            onMouseMove(event) {
+                this.cursorTarget.style.left = `${event.clientX}px`;
+                this.cursorTarget.style.top = `${event.clientY}px`;
+            }
+
+            onResize() {
+                this.generatePlatforms();
+                if (this.game) {
+                    this.game.resize();
+                    this.game.scanPlatforms('.platform');
+                }
+            }
+        }
+
+        let website;
+
+        function restartEngine() { website?.restartEngine(); }
+        function regeneratePlatforms() { website?.regeneratePlatforms(); }
+        function togglePathDebug() { website?.togglePathDebug(); }
+        function resetMetrics() { website?.resetMetrics(); }
+        function applyPreset(name) { website?.applyPreset(name); }
+
+        window.onload = () => {
+            website = new BlobEngineWebsite();
+            website.init();
+        };
+    </script>
+</body>
+</html>
